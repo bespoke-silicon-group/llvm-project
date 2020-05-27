@@ -14,9 +14,9 @@
 def HB32Model : SchedMachineModel {
   let MicroOpBufferSize = 0; // Explicitly set to zero since Rocket is in-order.
   let IssueWidth = 1;        // 1 micro-ops are dispatched per cycle.
-  let LoadLatency = 3;
-  let MispredictPenalty = 3;
-  let CompleteModel = 1;
+  let LoadLatency = 2;
+  let MispredictPenalty = 3; //TODO(Emily): need to determine this value
+  let CompleteModel = 0;     //TODO(Emily): need to remove this if all instr. covered
 }
 
 //===----------------------------------------------------------------------===//
@@ -36,7 +36,7 @@ def HB32UnitFPALU      : ProcResource<1>; // FP ALU
 
 let BufferSize = 1 in {
 def HB32UnitIDiv       : ProcResource<1>; // Int Division
-def HB32UnitFPDivSqrt  : ProcResource<1>; // FP Divide/Sqrt'
+def HB32UnitFPDivSqrt  : ProcResource<1>; // FP Divide/Sqrt
 }
 
 //===----------------------------------------------------------------------===//
@@ -53,14 +53,12 @@ def : WriteRes<WriteJmpReg, [HB32UnitB]>;
 def : WriteRes<WriteIALU, [HB32UnitALU]>;
 def : WriteRes<WriteShift, [HB32UnitALU]>;
 
-// Multiplies on Rocket differ by implementation; placeholder until
-// we can determine how to read from command line
-def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 4; }
+def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 32; }
 
-// 32-bit divides have worse case latency of 34 cycle
+// 32-bit divides take 32+ cycles, TODO(Emily): we maybe want to determine worst case
 def : WriteRes<WriteIDiv, [HB32UnitIDiv]> {
-  let Latency = 34;
-  let ResourceCycles = [34];
+  let Latency = 32;
+  let ResourceCycles = [32];
 }
 
 // Memory
@@ -94,12 +92,12 @@ def : WriteRes<WriteFSGNJ32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMinMax32, [HB32UnitFPALU]>;
 }
 
-// Most FP double precision operations are 6 cycles
-let Latency = 6 in {
-def : WriteRes<WriteFALU64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFSGNJ64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMinMax64, [HB32UnitFPALU]>;
-}
+//TODO(Emily): we don't have hardware double precision FP, so I don't think we need this
+//let Latency = 6 in {
+//def : WriteRes<WriteFALU64, [HB32UnitFPALU]>;
+//def : WriteRes<WriteFSGNJ64, [HB32UnitFPALU]>;
+//def : WriteRes<WriteFMinMax64, [HB32UnitFPALU]>;
+//}
 
 let Latency = 2 in {
 def : WriteRes<WriteFCvtI32ToF32, [HB32UnitFPALU]>;
@@ -117,34 +115,35 @@ def : WriteRes<WriteFMovF32ToI32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMovI32ToF32, [HB32UnitFPALU]>;
 }
 
-let Latency = 5 in {
+//FPU takes 4 cycles (TODO: confirm this)
+let Latency = 4 in {
 def : WriteRes<WriteFMul32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulAdd32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulSub32, [HB32UnitFPALU]>;
 }
 
-let Latency = 7 in {
-def : WriteRes<WriteFMul64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMulAdd64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMulSub64, [HB32UnitFPALU]>;
-}
+//let Latency = 7 in {
+//def : WriteRes<WriteFMul64, [HB32UnitFPALU]>;
+//def : WriteRes<WriteFMulAdd64, [HB32UnitFPALU]>;
+//def : WriteRes<WriteFMulSub64, [HB32UnitFPALU]>;
+//}
 
-// FP Divide unit on Rocket is not pipelined, so set resource cycles to latency
-let Latency = 20, ResourceCycles = [20] in {
-def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]>;
-def : WriteRes<WriteFDiv64, [HB32UnitFPDivSqrt]>;
-}
+//TODO(Emily): unsure if we support this, or how many cycles it would be
+//let Latency = 20, ResourceCycles = [20] in {
+//def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]>;
+//def : WriteRes<WriteFDiv64, [HB32UnitFPDivSqrt]>;
+//}
 
-// FP Sqrt unit on Rocket is not pipelined, so set resource cycles to latency
-def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]> { let Latency = 20;
+//def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]> { let Latency = 20;
                                                         let ResourceCycles = [20];}
-def : WriteRes<WriteFSqrt64, [HB32UnitFPDivSqrt]> { let Latency = 25;
+//def : WriteRes<WriteFSqrt64, [HB32UnitFPDivSqrt]> { let Latency = 25;
                                                         let ResourceCycles = [25];}
 
 def : WriteRes<WriteNop, []>;
 
 def : InstRW<[WriteIALU], (instrs COPY)>;
 
+//TODO(Emily): need to fill out the instructions we don't support
 let Unsupported = 1 in {
 def : WriteRes<WriteIALU32, []>;
 def : WriteRes<WriteShift32, []>;
@@ -166,7 +165,7 @@ def : WriteRes<WriteFMovF64ToI64, []>;
 
 //===----------------------------------------------------------------------===//
 // Subtarget-specific SchedRead types with cycles.
-// Dummy definitions for RocketCore.
+// TODO(Emily): need to determine if these are supported and their cycle counts
 def : ReadAdvance<ReadJmp, 0>;
 def : ReadAdvance<ReadJalr, 0>;
 def : ReadAdvance<ReadCSR, 0>;
