@@ -174,6 +174,7 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandPseudoPass());
+  addPass(createRISCVVanillaPass());
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
