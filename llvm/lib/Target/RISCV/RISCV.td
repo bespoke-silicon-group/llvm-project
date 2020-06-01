@@ -99,6 +99,7 @@ include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
 include "RISCVSchedRocket32.td"
 include "RISCVSchedRocket64.td"
+include "RISCVSchedHB32.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.
@@ -114,6 +115,7 @@ def : ProcessorModel<"rocket-rv32", Rocket32Model, [FeatureRVCHints]>;
 def : ProcessorModel<"rocket-rv64", Rocket64Model, [Feature64Bit,
                      FeatureRVCHints]>;
 
+def : ProcessorModel<"hb-rv32", HB32Model, []>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.
