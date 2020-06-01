@@ -86,18 +86,10 @@ def : WriteRes<WriteAtomicLDW, [HB32UnitMem]>;
 def : WriteRes<WriteAtomicSTW, [HB32UnitMem]>;
 
 // Most FP single precision operations are 4 cycles
-let Latency = 4 in {
-def : WriteRes<WriteFALU32, [HB32UnitFPALU]>;
-def : WriteRes<WriteFSGNJ32, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMinMax32, [HB32UnitFPALU]>;
-}
+def : WriteRes<WriteFALU32, [HB32UnitFPALU]> { let Latency = 4; }
 
-//TODO(Emily): we don't have hardware double precision FP, so I don't think we need this
-//let Latency = 6 in {
-//def : WriteRes<WriteFALU64, [HB32UnitFPALU]>;
-//def : WriteRes<WriteFSGNJ64, [HB32UnitFPALU]>;
-//def : WriteRes<WriteFMinMax64, [HB32UnitFPALU]>;
-//}
+// Most FP double precision operations are 6 cycles
+def : WriteRes<WriteFALU64, [HB32UnitFPALU]> { let Latency = 6; }
 
 let Latency = 2 in {
 def : WriteRes<WriteFCvtI32ToF32, [HB32UnitFPALU]>;
@@ -122,23 +114,6 @@ def : WriteRes<WriteFMulAdd32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulSub32, [HB32UnitFPALU]>;
 }
 
-//let Latency = 7 in {
-//def : WriteRes<WriteFMul64, [HB32UnitFPALU]>;
-//def : WriteRes<WriteFMulAdd64, [HB32UnitFPALU]>;
-//def : WriteRes<WriteFMulSub64, [HB32UnitFPALU]>;
-//}
-
-//TODO(Emily): unsure if we support this, or how many cycles it would be
-//let Latency = 20, ResourceCycles = [20] in {
-//def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]>;
-//def : WriteRes<WriteFDiv64, [HB32UnitFPDivSqrt]>;
-//}
-
-//def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]> { let Latency = 20;
-                                                        let ResourceCycles = [20];}
-//def : WriteRes<WriteFSqrt64, [HB32UnitFPDivSqrt]> { let Latency = 25;
-                                                        let ResourceCycles = [25];}
-
 def : WriteRes<WriteNop, []>;
 
 def : InstRW<[WriteIALU], (instrs COPY)>;
@@ -152,6 +127,13 @@ def : WriteRes<WriteIDiv32, []>;
 def : WriteRes<WriteSTD, []>;
 def : WriteRes<WriteLDWU, []>;
 def : WriteRes<WriteLDD, []>;
+def : WriteRes<WriteFMul64, []>;
+def : WriteRes<WriteFMulAdd64, []>;
+def : WriteRes<WriteFMulSub64, []>;
+def : WriteRes<WriteFDiv32, []>;
+def : WriteRes<WriteFDiv64, []>;
+def : WriteRes<WriteFSqrt32, []>;
+def : WriteRes<WriteFSqrt64, []>;
 def : WriteRes<WriteAtomicD, []>;
 def : WriteRes<WriteAtomicLDD, []>;
 def : WriteRes<WriteAtomicSTD, []>;
@@ -187,7 +169,6 @@ def : ReadAdvance<ReadAtomicLDW, 0>;
 def : ReadAdvance<ReadAtomicLDD, 0>;
 def : ReadAdvance<ReadAtomicSTW, 0>;
 def : ReadAdvance<ReadAtomicSTD, 0>;
-def : ReadAdvance<ReadFMemBase, 0>;
 def : ReadAdvance<ReadFALU32, 0>;
 def : ReadAdvance<ReadFALU64, 0>;
 def : ReadAdvance<ReadFMul32, 0>;
@@ -202,10 +183,6 @@ def : ReadAdvance<ReadFSqrt32, 0>;
 def : ReadAdvance<ReadFSqrt64, 0>;
 def : ReadAdvance<ReadFCmp32, 0>;
 def : ReadAdvance<ReadFCmp64, 0>;
-def : ReadAdvance<ReadFSGNJ32, 0>;
-def : ReadAdvance<ReadFSGNJ64, 0>;
-def : ReadAdvance<ReadFMinMax32, 0>;
-def : ReadAdvance<ReadFMinMax64, 0>;
 def : ReadAdvance<ReadFCvtF32ToI32, 0>;
 def : ReadAdvance<ReadFCvtF32ToI64, 0>;
 def : ReadAdvance<ReadFCvtF64ToI32, 0>;
