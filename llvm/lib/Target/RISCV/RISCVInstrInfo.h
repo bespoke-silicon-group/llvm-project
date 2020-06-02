@@ -101,6 +101,12 @@ public:
   ArrayRef<std::pair<unsigned, const char *>>
   getSerializableDirectMachineOperandTargetFlags() const override;
 
+  
+  unsigned getInstrLatency(const InstrItineraryData *ItinData,
+                           const MachineInstr& MI,
+                           unsigned *PredCost = nullptr 
+                           ) const override;
+
   // Return true if the function can safely be outlined from.
   virtual bool
   isFunctionSafeToOutlineFrom(MachineFunction &MF,

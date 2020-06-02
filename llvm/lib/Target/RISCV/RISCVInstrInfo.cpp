@@ -637,6 +637,30 @@ RISCVInstrInfo::getSerializableDirectMachineOperandTargetFlags() const {
       {MO_TLS_GD_HI, "riscv-tls-gd-hi"}};
   return makeArrayRef(TargetFlags);
 }
+
+unsigned RISCVInstrInfo::getInstrLatency(const InstrItineraryData *ItinData,
+                                         const MachineInstr& MI,
+                                         unsigned *PredCost 
+                                         ) const {
+  unsigned Latency = RISCVInstrInfo::getInstrLatency(ItinData, MI, PredCost);
+
+  std::string type_str;
+  llvm::raw_string_ostream rso(type_str);
+  MI.print(rso);
+
+  if(PredCost) {
+    errs() << "    PredCost: " << *PredCost << "\n";
+  }
+  
+  MachineInstr::mmo_iterator MMOI;
+  for(MMOI = MI.memoperands_begin(); MMOI != MI.memoperands_end(); ++MMOI) {
+    errs() << "     AddressSpace:" << ((*MMOI)->getAddrSpace()) << "\n";
+  }
+
+  return Latency;
+}
+
+
 bool RISCVInstrInfo::isFunctionSafeToOutlineFrom(
     MachineFunction &MF, bool OutlineFromLinkOnceODRs) const {
   const Function &F = MF.getFunction();
