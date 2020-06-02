@@ -394,6 +394,7 @@ def BGE  : BranchCC_rri<0b101, "bge">;
 def BLTU : BranchCC_rri<0b110, "bltu">;
 def BGEU : BranchCC_rri<0b111, "bgeu">;
 
+def ALW : Load_ri<0b010, "lw">, Sched<[WriteLDWR, ReadMemBase]>;
 def LB  : Load_ri<0b000, "lb">, Sched<[WriteLDB, ReadMemBase]>;
 def LH  : Load_ri<0b001, "lh">, Sched<[WriteLDH, ReadMemBase]>;
 def LW  : Load_ri<0b010, "lw">, Sched<[WriteLDW, ReadMemBase]>;
@@ -576,6 +577,7 @@ def PseudoLBU : PseudoLoad<"lbu">;
 def PseudoLH  : PseudoLoad<"lh">;
 def PseudoLHU : PseudoLoad<"lhu">;
 def PseudoLW  : PseudoLoad<"lw">;
+def PseudoALW : PseudoLoad<"lw">;
 
 def PseudoSB  : PseudoStore<"sb">;
 def PseudoSH  : PseudoStore<"sh">;
@@ -688,6 +690,8 @@ def : InstAlias<"lb $rd, (${rs1})",
                 (LB  GPR:$rd, GPR:$rs1, 0)>;
 def : InstAlias<"lh $rd, (${rs1})",
                 (LH  GPR:$rd, GPR:$rs1, 0)>;
+def : InstAlias<"lw $rd, (${rs1})",
+                (ALW  GPR:$rd, GPR:$rs1, 0)>;
 def : InstAlias<"lw $rd, (${rs1})",
                 (LW  GPR:$rd, GPR:$rs1, 0)>;
 def : InstAlias<"lbu $rd, (${rs1})",
@@ -1005,6 +1009,7 @@ defm : LdPat<sextloadi8, LB>;
 defm : LdPat<extloadi8, LB>;
 defm : LdPat<sextloadi16, LH>;
 defm : LdPat<extloadi16, LH>;
+defm : LdPat<load, ALW>, Requires<[IsRV32]>;
 defm : LdPat<load, LW>, Requires<[IsRV32]>;
 defm : LdPat<zextloadi8, LBU>;
 defm : LdPat<zextloadi16, LHU>;
@@ -1086,6 +1091,8 @@ def : PatGprGpr<riscv_sraw, SRAW>;
 
 /// Loads
 
+defm : LdPat<sextloadi32, ALW>;
+defm : LdPat<extloadi32, ALW>;
 defm : LdPat<sextloadi32, LW>;
 defm : LdPat<extloadi32, LW>;
 defm : LdPat<zextloadi32, LWU>;

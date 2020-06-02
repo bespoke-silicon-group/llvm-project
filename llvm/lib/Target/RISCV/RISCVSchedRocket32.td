@@ -78,6 +78,7 @@ def : WriteRes<WriteCSR, [Rocket32UnitALU]>;
 
 let Latency = 2 in {
 def : WriteRes<WriteLDW, [Rocket32UnitMem]>;
+def : WriteRes<WriteLDWR, [Rocket32UnitMem]>;
 def : WriteRes<WriteFLD32, [Rocket32UnitMem]>;
 def : WriteRes<WriteFLD64, [Rocket32UnitMem]>;
 

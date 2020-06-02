@@ -93,13 +93,13 @@ include "RISCVSystemOperands.td"
 //===----------------------------------------------------------------------===//
 
 include "RISCVSchedule.td"
+include "RISCVSchedRocket32.td"
+include "RISCVSchedRocket64.td"
+include "RISCVSchedHB32.td"
 include "RISCVRegisterInfo.td"
 include "RISCVCallingConv.td"
 include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
-include "RISCVSchedRocket32.td"
-include "RISCVSchedRocket64.td"
-include "RISCVSchedHB32.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.

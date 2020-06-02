@@ -83,6 +83,10 @@ def : WriteRes<WriteAtomicW, [HB32UnitMem]>;
 def : WriteRes<WriteAtomicLDW, [HB32UnitMem]>;
 }
 
+def : WriteRes<WriteLDWR, [HB32UnitMem]> {
+  let Latency = 20;
+}
+
 def : WriteRes<WriteAtomicSTW, [HB32UnitMem]>;
 
 // Most FP single precision operations are 4 cycles
