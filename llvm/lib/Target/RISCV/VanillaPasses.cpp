@@ -20,6 +20,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "machine-scheduler"
+
 /// Example Machine Function Pass for Vanilla Core
 namespace {
 
@@ -44,7 +46,24 @@ char VanillaPass::ID = 0;
 
 /// Vanilla Core Scheduler
 SUnit *VanillaScheduler::pickNode (bool &IsTopNode) {
-  errs() << "Running Vanilla Scheduler\n";
+  SUnit* SU = Top.pickOnlyChoice(); 
 
+  //if (!SU) {
+  //  for(SU : Top.Available) {
+  //    if (!canIssueNow()) continue;
+  //    
+  //    
+  //    a
+  //  }
+
+  if (SU) {
+    LLVM_DEBUG(dbgs() << "Vanilla Scheduling SU(" << SU->NodeNum << ") "
+                      << *SU->getInstr());
+    Top.removeReady(SU);
+    IsTopNode = true;
+    return SU;
+  }
+
+  // Fallback to generic scheduler
   return GenericScheduler::pickNode(IsTopNode);
 }
