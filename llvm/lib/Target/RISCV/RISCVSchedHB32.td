@@ -12,7 +12,7 @@
 
 // Hammerblade machine model for scheduling and other instruction cost heuristics.
 def HB32Model : SchedMachineModel {
-  let MicroOpBufferSize = 0; // Explicitly set to zero since Rocket is in-order.
+  let MicroOpBufferSize = 0; // Explicitly set to zero since HB is in-order.
   let IssueWidth = 1;        // 1 micro-ops are dispatched per cycle.
   let LoadLatency = 2;
   let MispredictPenalty = 3; //TODO(Emily): need to determine this value
