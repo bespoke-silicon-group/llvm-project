@@ -74,7 +74,7 @@ def : WriteRes<WriteLDH, [HB32UnitMem]>;
 def : WriteRes<WriteCSR, [HB32UnitALU]>;
 }
 
-let Latency = 20 in {
+let Latency = 2 in {
 def : WriteRes<WriteLDW, [HB32UnitMem]>;
 def : WriteRes<WriteFLD32, [HB32UnitMem]>;
 def : WriteRes<WriteFLD64, [HB32UnitMem]>;
