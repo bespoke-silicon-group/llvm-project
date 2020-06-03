@@ -10,6 +10,17 @@
 // The following definitions describe the simpler per-operand machine model.
 // This works with MachineScheduler. See MCSchedule.h for details.
 
+// NOTE(Emily): adding this quickly here, we care about local vs. remote loads
+// TODO:
+// - do we want to add more addr spaces?
+// - should this be implemented in another riscv file (i.e. like the AMDGPU arch specific instr. files)
+class AddressSpacesImpl {
+  int Local = 0;
+  int Remote = 1;
+}
+
+def AddrSpaces : AddressSpacesImpl;
+
 // Hammerblade machine model for scheduling and other instruction cost heuristics.
 def HB32Model : SchedMachineModel {
   let MicroOpBufferSize = 0; // Explicitly set to zero since Rocket is in-order.
