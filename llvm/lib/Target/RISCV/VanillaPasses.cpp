@@ -14,8 +14,6 @@ struct VanillaPass : public MachineFunctionPass {
   VanillaPass(): MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override {
-    errs() << "VanillaPass: ";
-    errs() << MF.getName() << "\n";
     return false;
   }
 };
@@ -27,4 +25,3 @@ FunctionPass* llvm::createRISCVVanillaPass() {
 }
 
 char VanillaPass::ID = 0;
-static RegisterPass<VanillaPass> X("vanilla", "Vanilla Pass");
