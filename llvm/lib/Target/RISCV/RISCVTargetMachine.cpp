@@ -12,6 +12,7 @@
 
 #include "RISCVTargetMachine.h"
 #include "RISCV.h"
+#include "VanillaPasses.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
 #include "TargetInfo/RISCVTargetInfo.h"
@@ -120,6 +121,9 @@ public:
     return getTM<RISCVTargetMachine>();
   }
 
+  ScheduleDAGInstrs *createMachineScheduler(
+      MachineSchedContext *C) const override;
+
   void addIRPasses() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
@@ -134,6 +138,11 @@ public:
 
 TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new RISCVPassConfig(*this, PM);
+}
+
+ScheduleDAGInstrs *RISCVPassConfig::createMachineScheduler(
+    MachineSchedContext *C) const {
+  return new ScheduleDAGMILive(C, std::make_unique<VanillaScheduler>(C));
 }
 
 void RISCVPassConfig::addIRPasses() {
