@@ -67,7 +67,7 @@ SUnit *VanillaScheduler::pickNode (bool &IsTopNode) {
         if (MI->mayLoad() &&
             !memops.empty() && memops[0]->getAddrSpace() == 1) {
           LLVM_DEBUG(dbgs() << "VanillaScheduler bumping load ("
-                            << SU->NodeNum << ") "
+                            << SUi->NodeNum << ") "
                             << *MI);
           SU = SUi;
           break;
