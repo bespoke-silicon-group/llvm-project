@@ -24,18 +24,24 @@ using namespace llvm;
 
 #define DEBUG_TYPE "machine-scheduler"
 
+/// Flag to enable custom scheduler for HB32 Vanilla core
 static cl::opt<bool>
     HB32Sched("hb32sched",
               cl::desc("Enable HB32 Vanilla Core's custom scheduler"),
               cl::init(false), cl::Hidden);
 
-/// HB32 Vanilla Core Scheduler
-SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
-  // Run generic scheduler if HB32Sched is not enabled on command line
+/// Create custom scheduler if HB32Sched is enabled on the command line.
+ScheduleDAGInstrs *llvm::createHB32Scheduler(MachineSchedContext *C) {
   if (!HB32Sched) {
-    return GenericScheduler::pickNode(IsTopNode);
+    return new ScheduleDAGMILive(C, std::make_unique<HB32Scheduler>(C));
   }
 
+  // NULL selects default machine scheduler
+  return nullptr;
+}
+
+/// HB32 Vanilla Core Scheduler
+SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
   if (DAG->top() == DAG->bottom()) {
     assert(Top.Available.empty() && Top.Pending.empty() &&
            Bot.Available.empty() && Bot.Pending.empty() && "ReadyQ garbage");
@@ -83,3 +89,4 @@ SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
                     << *SU->getInstr());
   return SU;
 }
+
