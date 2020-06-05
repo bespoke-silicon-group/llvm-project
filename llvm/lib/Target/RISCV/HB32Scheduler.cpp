@@ -1,4 +1,4 @@
-//===-- HB32Scheduler.cpp - HB32 Subtarget specific passes --------------===//
+//===-- HB32Scheduler.cpp - HB32 Subtarget specific passes -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -24,8 +24,17 @@ using namespace llvm;
 
 #define DEBUG_TYPE "machine-scheduler"
 
+static cl::opt<bool>
+    HB32Sched("hb32sched",
+              cl::desc("Enable HB32 Vanilla Core's custom scheduler"),
+              cl::init(false), cl::Hidden);
+
 /// HB32 Vanilla Core Scheduler
 SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
+  if (!HB32Sched) {
+    return GenericScheduler::pickNode(IsTopNode);
+  }
+
   if (DAG->top() == DAG->bottom()) {
     assert(Top.Available.empty() && Top.Pending.empty() &&
            Bot.Available.empty() && Bot.Pending.empty() && "ReadyQ garbage");
