@@ -17,6 +17,10 @@
 
 namespace llvm {
 
+/// Creates HB32 Scheduler. This creates a custom scheduler in place of default
+/// scheduler if corresponding flag is provided on the command line.
+ScheduleDAGInstrs *createHB32Scheduler(MachineSchedContext *C);
+
 /// Custom scheduler for HB32 Vanilla Core extending the generic scheduler
 class HB32Scheduler : public GenericScheduler {
 public:

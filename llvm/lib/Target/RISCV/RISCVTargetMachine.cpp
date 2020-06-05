@@ -155,7 +155,7 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 ScheduleDAGInstrs *RISCVPassConfig::createMachineScheduler(
     MachineSchedContext *C) const {
   if (C->MF->getSubtarget().getCPU().str() == "hb-rv32") {
-    return new ScheduleDAGMILive(C, std::make_unique<HB32Scheduler>(C));
+    return createHB32Scheduler(C);
   }
 
   // NULL selects default (generic) machine scheduler
