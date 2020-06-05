@@ -39,6 +39,7 @@ add_llvm_target(RISCVCodeGen
   RISCVTargetMachine.cpp
   RISCVTargetObjectFile.cpp
   RISCVTargetTransformInfo.cpp
+  HB32Scheduler.cpp
 
   LINK_COMPONENTS
   Analysis

@@ -1,4 +1,4 @@
-//===-- VanillaPasses.cpp - Vanilla Subtarget specific passes --------------===//
+//===-- HB32Scheduler.cpp - HB32 Subtarget specific passes --------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implements Vanilla Core specific passes.
+// Implements HB32 Vanilla Core specific passes.
 //
 //===----------------------------------------------------------------------===//
 
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
-#include "VanillaPasses.h"
+#include "HB32Scheduler.h"
 #include "llvm/Pass.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -24,30 +24,8 @@ using namespace llvm;
 
 #define DEBUG_TYPE "machine-scheduler"
 
-/// Example Machine Function Pass for Vanilla Core
-namespace {
-
-struct VanillaPass : public MachineFunctionPass {
-  static char ID;
-
-  VanillaPass(): MachineFunctionPass(ID) {}
-
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    // Do nothing
-    return false;
-  }
-};
-
-}
-
-FunctionPass* llvm::createRISCVVanillaPass() {
-  return new VanillaPass();
-}
-
-char VanillaPass::ID = 0;
-
-/// Vanilla Core Scheduler
-SUnit *VanillaScheduler::pickNode (bool &IsTopNode) {
+/// HB32 Vanilla Core Scheduler
+SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
   if (DAG->top() == DAG->bottom()) {
     assert(Top.Available.empty() && Top.Pending.empty() &&
            Bot.Available.empty() && Bot.Pending.empty() && "ReadyQ garbage");
@@ -66,7 +44,7 @@ SUnit *VanillaScheduler::pickNode (bool &IsTopNode) {
         ArrayRef<MachineMemOperand*> memops = MI->memoperands();
         if (MI->mayLoad() &&
             !memops.empty() && memops[0]->getAddrSpace() == 1) {
-          LLVM_DEBUG(dbgs() << "VanillaScheduler bumping load ("
+          LLVM_DEBUG(dbgs() << "HB32Scheduler bumping load ("
                             << SUi->NodeNum << ") "
                             << *MI);
           SU = SUi;
