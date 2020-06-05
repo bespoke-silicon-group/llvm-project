@@ -31,6 +31,7 @@ static cl::opt<bool>
 
 /// HB32 Vanilla Core Scheduler
 SUnit *HB32Scheduler::pickNode (bool &IsTopNode) {
+  // Run generic scheduler if HB32Sched is not enabled on command line
   if (!HB32Sched) {
     return GenericScheduler::pickNode(IsTopNode);
   }
