@@ -1,4 +1,4 @@
-//===-- VanillaPasses.h - Vanilla Subtarget specific passes ----------------===//
+//===-- HB32Scheduler.h - HB32 Subtarget specific passes ----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Vanilla Core specific passes.
+// HB32 Vanilla Core specific passes.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,10 +17,10 @@
 
 namespace llvm {
 
-/// Example Machine Function Pass for Vanilla Core
-class VanillaScheduler : public GenericScheduler {
+/// Custom scheduler for HB32 Vanilla Core extending the generic scheduler
+class HB32Scheduler : public GenericScheduler {
 public:
-  VanillaScheduler(const MachineSchedContext *C): GenericScheduler(C) {}
+  HB32Scheduler(const MachineSchedContext *C): GenericScheduler(C) {}
 
 protected:
   SUnit *pickNode (bool &IsTopNode) override;

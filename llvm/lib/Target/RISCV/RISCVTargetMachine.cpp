@@ -12,7 +12,7 @@
 
 #include "RISCVTargetMachine.h"
 #include "RISCV.h"
-#include "VanillaPasses.h"
+#include "HB32Scheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
 #include "TargetInfo/RISCVTargetInfo.h"
@@ -143,7 +143,7 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 ScheduleDAGInstrs *RISCVPassConfig::createMachineScheduler(
     MachineSchedContext *C) const {
   if (C->MF->getSubtarget().getCPU().str() == "hb-rv32") {
-    return new ScheduleDAGMILive(C, std::make_unique<VanillaScheduler>(C));
+    return new ScheduleDAGMILive(C, std::make_unique<HB32Scheduler>(C));
   }
 
   // NULL selects default (generic) machine scheduler
@@ -188,7 +188,6 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandPseudoPass());
-  addPass(createRISCVVanillaPass());
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
