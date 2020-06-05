@@ -12,6 +12,7 @@
 
 #include "RISCVTargetMachine.h"
 #include "RISCV.h"
+#include "HB32Scheduler.h"
 #include "RISCVTargetObjectFile.h"
 #include "RISCVTargetTransformInfo.h"
 #include "TargetInfo/RISCVTargetInfo.h"
@@ -120,6 +121,9 @@ public:
     return getTM<RISCVTargetMachine>();
   }
 
+  ScheduleDAGInstrs *createMachineScheduler(
+      MachineSchedContext *C) const override;
+
   void addIRPasses() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
@@ -134,6 +138,16 @@ public:
 
 TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new RISCVPassConfig(*this, PM);
+}
+
+ScheduleDAGInstrs *RISCVPassConfig::createMachineScheduler(
+    MachineSchedContext *C) const {
+  if (C->MF->getSubtarget().getCPU().str() == "hb-rv32") {
+    return createHB32Scheduler(C);
+  }
+
+  // NULL selects default (generic) machine scheduler
+  return nullptr;
 }
 
 void RISCVPassConfig::addIRPasses() {
@@ -174,7 +188,6 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandPseudoPass());
-  addPass(createRISCVVanillaPass());
 }
 
 void RISCVPassConfig::addPreRegAlloc() {

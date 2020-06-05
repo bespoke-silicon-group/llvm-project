@@ -17,7 +17,6 @@ tablegen(LLVM RISCVGenSystemOperands.inc -gen-searchable-tables)
 add_public_tablegen_target(RISCVCommonTableGen)
 
 add_llvm_target(RISCVCodeGen
-  VanillaPasses.cpp
   RISCVAsmPrinter.cpp
   RISCVCallLowering.cpp
   RISCVExpandPseudoInsts.cpp
@@ -35,6 +34,7 @@ add_llvm_target(RISCVCodeGen
   RISCVTargetMachine.cpp
   RISCVTargetObjectFile.cpp
   RISCVTargetTransformInfo.cpp
+  HB32Scheduler.cpp
   )
 
 add_subdirectory(AsmParser)
