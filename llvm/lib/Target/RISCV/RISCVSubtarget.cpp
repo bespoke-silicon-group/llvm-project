@@ -17,7 +17,12 @@
 #include "RISCVLegalizerInfo.h"
 #include "RISCVRegisterBankInfo.h"
 #include "RISCVTargetMachine.h"
+<<<<<<< HEAD
 #include "llvm/MC/TargetRegistry.h"
+=======
+#include "llvm/CodeGen/ScheduleDAG.h"
+#include "llvm/Support/TargetRegistry.h"
+>>>>>>> 639048242a29... Adjust hb-rv32 subtarget's address space 1 load-latency
 
 using namespace llvm;
 
@@ -164,4 +169,19 @@ unsigned RISCVSubtarget::getMaxELENForFixedLengthVectors() const {
 
 bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
   return hasVInstructions() && getMinRVVVectorSizeInBits() != 0;
+}
+
+void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
+                                            SDep &Dep) const {
+  MachineInstr *SrcInst = Def->getInstr();
+  if (!Def->isInstr())
+    return;
+
+  if (getCPU() == "hb-rv32") {
+    ArrayRef<MachineMemOperand*> memops = SrcInst->memoperands();
+    if (SrcInst->mayLoad() &&
+        !memops.empty() && memops[0]->getAddrSpace() == 1) {
+      Dep.setLatency(20);
+    }
+  }
 }
