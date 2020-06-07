@@ -17,12 +17,9 @@
 #include "RISCVLegalizerInfo.h"
 #include "RISCVRegisterBankInfo.h"
 #include "RISCVTargetMachine.h"
-<<<<<<< HEAD
 #include "llvm/MC/TargetRegistry.h"
-=======
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/Support/TargetRegistry.h"
->>>>>>> 639048242a29... Adjust hb-rv32 subtarget's address space 1 load-latency
 
 using namespace llvm;
 
@@ -171,6 +168,7 @@ bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
   return hasVInstructions() && getMinRVVVectorSizeInBits() != 0;
 }
 
+/// Target specific adjustments to scheduler dependencies
 void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
                                             SDep &Dep) const {
   MachineInstr *SrcInst = Def->getInstr();
@@ -178,6 +176,9 @@ void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
     return;
 
   if (getCPU() == "hb-rv32") {
+    // For HammerBlade Vanilla Subtarget, remote addresses are assigned
+    // address space 1. Here, we conditionally ajdust the latency of loads
+    // to remote addresses by looking at address space of memory operands.
     ArrayRef<MachineMemOperand*> memops = SrcInst->memoperands();
     if (SrcInst->mayLoad() &&
         !memops.empty() && memops[0]->getAddrSpace() == 1) {
