@@ -17,6 +17,7 @@
 #include "RISCVLegalizerInfo.h"
 #include "RISCVRegisterBankInfo.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
@@ -76,4 +77,19 @@ const LegalizerInfo *RISCVSubtarget::getLegalizerInfo() const {
 
 const RegisterBankInfo *RISCVSubtarget::getRegBankInfo() const {
   return RegBankInfo.get();
+}
+
+void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
+                                            SDep &Dep) const {
+  MachineInstr *SrcInst = Def->getInstr();
+  if (!Def->isInstr())
+    return;
+
+  if (getCPU() == "hb-rv32") {
+    ArrayRef<MachineMemOperand*> memops = SrcInst->memoperands();
+    if (SrcInst->mayLoad() &&
+        !memops.empty() && memops[0]->getAddrSpace() == 1) {
+      Dep.setLatency(20);
+    }
+  }
 }
