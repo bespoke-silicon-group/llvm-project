@@ -378,6 +378,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setTruncStoreAction(MVT::f32, MVT::f16, Expand);
   }
 
+  if (Subtarget.hasStdExtF() && Subtarget.noFdiv()) {
+    setOperationAction(ISD::FDIV, MVT::f32, Expand);
+    setOperationAction(ISD::FSQRT, MVT::f32, Expand);
+  }
+
   if (Subtarget.hasStdExtF() && Subtarget.is64Bit())
     setOperationAction(ISD::BITCAST, MVT::i32, Custom);
 
