@@ -73,6 +73,13 @@ def FeatureRV32E
 def IsRV32E : Predicate<"Subtarget->isRV32E()">,
                         AssemblerPredicate<"FeatureRV32E">;
 
+def FeatureNoFdiv
+    : SubtargetFeature<"no-fdiv", "NoFdiv", "true",
+                       "Disable FP div and sqrt instructions.">;
+def NoFdiv : Predicate<"Subtarget->noFdiv()">,
+                       AssemblerPredicate<(all_of FeatureNoFdiv),
+                       "Disable FP div and sqrt instructions.">;
+
 def FeatureRelax
     : SubtargetFeature<"relax", "EnableLinkerRelax", "true",
                        "Enable Linker relaxation.">;
