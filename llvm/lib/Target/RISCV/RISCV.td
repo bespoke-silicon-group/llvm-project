@@ -197,7 +197,7 @@ def IsRV32E : Predicate<"Subtarget->isRV32E()">,
 def FeatureNoFdiv
     : SubtargetFeature<"no-fdiv", "NoFdiv", "true",
                        "Disable FP div and sqrt instructions.">;
-def NoFdiv : Predicate<"Subtarget->noFdiv()">,
+def HasFdiv : Predicate<"!Subtarget->noFdiv()">,
                        AssemblerPredicate<(all_of FeatureNoFdiv),
                        "Disable FP div and sqrt instructions.">;
 
