@@ -139,15 +139,6 @@ def        : FPALUSDynFrmAlias<FSUB_S, "fsub.s">;
 def FMUL_S : FPALUS_rr_frm<0b0001000, "fmul.s">,
              Sched<[WriteFMul32, ReadFMul32, ReadFMul32]>;
 def        : FPALUSDynFrmAlias<FMUL_S, "fmul.s">;
-def FDIV_S : FPALUS_rr_frm<0b0001100, "fdiv.s">,
-             Sched<[WriteFDiv32, ReadFDiv32, ReadFDiv32]>;
-def        : FPALUSDynFrmAlias<FDIV_S, "fdiv.s">;
-
-def FSQRT_S : FPUnaryOp_r_frm<0b0101100, FPR32, FPR32, "fsqrt.s">,
-              Sched<[WriteFSqrt32, ReadFSqrt32]> {
-  let rs2 = 0b00000;
-}
-def         : FPUnaryOpDynFrmAlias<FSQRT_S, "fsqrt.s", FPR32, FPR32>;
 
 def FSGNJ_S  : FPALUS_rr<0b0010000, 0b000, "fsgnj.s">;
 def FSGNJN_S : FPALUS_rr<0b0010000, 0b001, "fsgnjn.s">;
@@ -198,6 +189,18 @@ def FMV_W_X : FPUnaryOp_r<0b1111000, 0b000, FPR32, GPR, "fmv.w.x">,
   let rs2 = 0b00000;
 }
 } // Predicates = [HasStdExtF]
+
+let Predicates = [HasStdExtF, HasFdiv] in {
+def FDIV_S : FPALUS_rr_frm<0b0001100, "fdiv.s">,
+             Sched<[WriteFDiv32, ReadFDiv32, ReadFDiv32]>;
+def        : FPALUSDynFrmAlias<FDIV_S, "fdiv.s">;
+
+def FSQRT_S : FPUnaryOp_r_frm<0b0101100, FPR32, FPR32, "fsqrt.s">,
+              Sched<[WriteFSqrt32, ReadFSqrt32]> {
+  let rs2 = 0b00000;
+}
+def         : FPUnaryOpDynFrmAlias<FSQRT_S, "fsqrt.s", FPR32, FPR32>;
+} // Predicates = [HasStdExtF, HasFdiv]
 
 let Predicates = [HasStdExtF, IsRV64] in {
 def FCVT_L_S  : FPUnaryOp_r_frm<0b1100000, GPR, FPR32, "fcvt.l.s">,
@@ -305,9 +308,6 @@ def : Pat<(bitconvert FPR32:$rs1), (FMV_X_W FPR32:$rs1)>;
 def : PatFpr32Fpr32DynFrm<fadd, FADD_S>;
 def : PatFpr32Fpr32DynFrm<fsub, FSUB_S>;
 def : PatFpr32Fpr32DynFrm<fmul, FMUL_S>;
-def : PatFpr32Fpr32DynFrm<fdiv, FDIV_S>;
-
-def : Pat<(fsqrt FPR32:$rs1), (FSQRT_S FPR32:$rs1, 0b111)>;
 
 def : Pat<(fneg FPR32:$rs1), (FSGNJN_S $rs1, $rs1)>;
 def : Pat<(fabs FPR32:$rs1), (FSGNJX_S $rs1, $rs1)>;
@@ -373,6 +373,11 @@ defm : LdPat<load, FLW>;
 defm : StPat<store, FSW, FPR32>;
 
 } // Predicates = [HasStdExtF]
+
+let Predicates = [HasStdExtF, HasFdiv] in {
+def : PatFpr32Fpr32DynFrm<fdiv, FDIV_S>;
+def : Pat<(fsqrt FPR32:$rs1), (FSQRT_S FPR32:$rs1, 0b111)>;
+} // Predicates = [HasStdExtF, HasFdiv]
 
 let Predicates = [HasStdExtF, IsRV32] in {
 // float->[u]int. Round-to-zero must be used.
