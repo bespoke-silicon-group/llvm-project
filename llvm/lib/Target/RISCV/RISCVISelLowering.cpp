@@ -65,8 +65,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     ABI = Subtarget.is64Bit() ? RISCVABI::ABI_LP64 : RISCVABI::ABI_ILP32;
   }
 
-  if (Subtarget.noFdiv() &&
-      !(Subtarget.hasStdExtF() | Subtarget.hasStdExtD()))
+  if (Subtarget.noFdiv() && !(Subtarget.hasStdExtF() | Subtarget.hasStdExtD()))
     errs() << "Machine attribute no-fdiv requires F or D extensions for FP "
               "registers.\n";
 
@@ -214,7 +213,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::STRICT_FP_TO_UINT, MVT::i32, Custom);
     setOperationAction(ISD::STRICT_FP_TO_SINT, MVT::i32, Custom);
   }
-       
+
   if (Subtarget.hasStdExtD() && Subtarget.noFdiv()) {
     setOperationAction(ISD::FDIV, MVT::f64, Expand);
     setOperationAction(ISD::FSQRT, MVT::f64, Expand);
