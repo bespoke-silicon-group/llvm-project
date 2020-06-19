@@ -426,6 +426,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SET_ROUNDING, MVT::Other, Custom);
   }
 
+  if (Subtarget.hasStdExtD() && Subtarget.noFdiv()) {
+    setOperationAction(ISD::FDIV, MVT::f64, Expand);
+    setOperationAction(ISD::FSQRT, MVT::f64, Expand);
+  }
+
   setOperationAction(ISD::GlobalAddress, XLenVT, Custom);
   setOperationAction(ISD::BlockAddress, XLenVT, Custom);
   setOperationAction(ISD::ConstantPool, XLenVT, Custom);
