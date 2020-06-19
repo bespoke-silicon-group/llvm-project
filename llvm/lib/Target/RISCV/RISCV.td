@@ -196,7 +196,7 @@ def IsRV32E : Predicate<"Subtarget->isRV32E()">,
 
 def FeatureNoFdiv
     : SubtargetFeature<"no-fdiv", "NoFdiv", "true",
-                       "Disable FP div and sqrt instructions.">;
+                       "Disable FP div and sqrt instructions">;
 
 def FeatureRelax
     : SubtargetFeature<"relax", "EnableLinkerRelax", "true",

@@ -68,6 +68,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     ABI = Subtarget.is64Bit() ? RISCVABI::ABI_LP64 : RISCVABI::ABI_ILP32;
   }
 
+  if (Subtarget.noFdiv() &&
+      !(Subtarget.hasStdExtF() | Subtarget.hasStdExtD()))
+    errs() << "Machine attribute no-fdiv requires F or D extensions for FP "
+              "registers.\n";
+
   switch (ABI) {
   default:
     report_fatal_error("Don't know how to lower this ABI");
