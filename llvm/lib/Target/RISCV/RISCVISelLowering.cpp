@@ -65,6 +65,10 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     ABI = Subtarget.is64Bit() ? RISCVABI::ABI_LP64 : RISCVABI::ABI_ILP32;
   }
 
+  if (Subtarget.noFdiv() && !(Subtarget.hasStdExtF() | Subtarget.hasStdExtD()))
+    errs() << "Machine attribute no-fdiv requires F or D extensions for FP "
+              "registers.\n";
+
   switch (ABI) {
   default:
     report_fatal_error("Don't know how to lower this ABI");
@@ -178,6 +182,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setTruncStoreAction(MVT::f32, MVT::f16, Expand);
   }
 
+  if (Subtarget.hasStdExtF() && Subtarget.noFdiv()) {
+    setOperationAction(ISD::FDIV, MVT::f32, Expand);
+    setOperationAction(ISD::FSQRT, MVT::f32, Expand);
+  }
+
   if (Subtarget.hasStdExtF() && Subtarget.is64Bit())
     setOperationAction(ISD::BITCAST, MVT::i32, Custom);
 
@@ -195,6 +204,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       setOperationAction(Op, MVT::f64, Expand);
     setLoadExtAction(ISD::EXTLOAD, MVT::f64, MVT::f16, Expand);
     setTruncStoreAction(MVT::f64, MVT::f16, Expand);
+  }
+
+  if (Subtarget.hasStdExtD() && Subtarget.noFdiv()) {
+    setOperationAction(ISD::FDIV, MVT::f64, Expand);
+    setOperationAction(ISD::FSQRT, MVT::f64, Expand);
   }
 
   setOperationAction(ISD::GlobalAddress, XLenVT, Custom);
