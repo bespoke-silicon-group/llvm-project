@@ -44,6 +44,7 @@ def WriteFALU64     : SchedWrite;    // FP 64-bit computation
 def WriteFMul16     : SchedWrite;    // 16-bit floating point multiply
 def WriteFMA16      : SchedWrite;    // 16-bit floating point fused multiply-add
 def WriteFMul32     : SchedWrite;    // 32-bit floating point multiply
+def WriteFMulAdd32  : SchedWrite;    // 32-bit floating point multiply add
 def WriteFMA32      : SchedWrite;    // 32-bit floating point fused multiply-add
 def WriteFMul64     : SchedWrite;    // 64-bit floating point multiply
 def WriteFMA64      : SchedWrite;    // 64-bit floating point fused multiply-add
