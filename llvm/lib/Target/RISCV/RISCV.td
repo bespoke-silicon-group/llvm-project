@@ -227,8 +227,6 @@ include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
 include "RISCVSchedRocket.td"
 include "RISCVSchedSiFive7.td"
-include "RISCVSchedRocket32.td"
-include "RISCVSchedRocket64.td"
 include "RISCVSchedHB32.td"
 
 //===----------------------------------------------------------------------===//
