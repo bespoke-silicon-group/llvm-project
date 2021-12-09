@@ -51,7 +51,7 @@ def : WriteRes<WriteJalr, [HB32UnitB]>;
 def : WriteRes<WriteJmpReg, [HB32UnitB]>;
 
 def : WriteRes<WriteIALU, [HB32UnitALU]>;
-def : WriteRes<WriteShift, [HB32UnitALU]>;
+def : WriteRes<WriteShiftImm, [HB32UnitALU]>;
 
 def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 32; }
 
