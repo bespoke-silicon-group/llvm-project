@@ -306,7 +306,7 @@ def : ProcessorModel<"sifive-u74", SiFive7Model, [Feature64Bit,
                                                   FeatureStdExtD,
                                                   FeatureStdExtC]>;
 
-def : ProcessorModel<"hb-rv32", HB32Model, []>;
+def : ProcessorModel<"hb-rv32", HB32Model, [FeatureStdExtM]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.

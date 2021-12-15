@@ -16,7 +16,8 @@ def HB32Model : SchedMachineModel {
   let IssueWidth = 1;        // 1 micro-ops are dispatched per cycle.
   let LoadLatency = 2;
   let MispredictPenalty = 3; //TODO(Emily): need to determine this value
-  let CompleteModel = 0;     //TODO(Emily): need to remove this if all instr. covered
+  let CompleteModel = false;     //TODO(Emily): need to remove this if all instr. covered
+  let UnsupportedFeatures = [HasStdExtV, HasStdExtZvamo, HasStdExtZvlsseg];
 }
 
 //===----------------------------------------------------------------------===//
@@ -199,4 +200,11 @@ def : ReadAdvance<ReadFMovF64ToI64, 0>;
 def : ReadAdvance<ReadFMovI64ToF64, 0>;
 def : ReadAdvance<ReadFClass32, 0>;
 def : ReadAdvance<ReadFClass64, 0>;
+
+//===----------------------------------------------------------------------===//
+// Unsupported extensions
+defm : UnsupportedSchedV;
+defm : UnsupportedSchedZba;
+defm : UnsupportedSchedZbb;
+defm : UnsupportedSchedZfh;
 }
