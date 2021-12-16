@@ -591,3 +591,20 @@ def AnyReg : RegisterClass<"RISCV", [untyped], 32,
                                 (sequence "V%u", 0, 31))> {
   let Size = 32;
 }
+
+let Namespace = "RISCV" in {
+  def qsub0 : SubRegIndex<32>;
+  def qsub1 : SubRegIndex<32>;
+  def qsub2 : SubRegIndex<32>;
+  def qsub3 : SubRegIndex<32>;
+}
+
+def QuadFReg : RegisterTuples<[qsub0, qsub1, qsub2, qsub3], [
+  (add F0_F, F1_F, F2_F, F3_F, F4_F, F10_F, F11_F, F12_F, F13_F, F14_F, F28_F, F18_F, F19_F, F20_F, F21_F, F22_F, F23_F, F24_F),
+  (add F1_F, F2_F, F3_F, F4_F, F5_F, F11_F, F12_F, F13_F, F14_F, F15_F, F29_F, F19_F, F20_F, F21_F, F22_F, F23_F, F24_F, F25_F),
+  (add F2_F, F3_F, F4_F, F5_F, F6_F, F12_F, F13_F, F14_F, F15_F, F16_F, F30_F, F20_F, F21_F, F22_F, F23_F, F24_F, F25_F, F26_F),
+  (add F3_F, F4_F, F5_F, F6_F, F7_F, F13_F, F14_F, F15_F, F16_F, F17_F, F31_F, F21_F, F22_F, F23_F, F24_F, F25_F, F26_F, F27_F)]>;
+
+def FPRFour : RegisterClass<"RISCV", [v4f32], 32, (add QuadFReg)> {
+  let Size = 128;
+}
