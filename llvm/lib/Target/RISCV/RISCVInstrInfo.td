@@ -1458,6 +1458,12 @@ def PseudoLoad4Exp : Pseudo<(outs FPRFour:$rd), (ins GPR:$rs1, GPR:$rs2), [], "f
 
 def : Pat<(int_riscv_flw4 BaseAddr:$rs1, GPR:$rs2), (PseudoLoad4Exp BaseAddr:$rs1, GPR:$rs2)>;
 
+def as_i16imm : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getSExtValue() + 1, SDLoc(N), MVT::i16);
+}]>;
+
+def : Pat<(extractelt FPRFour:$rs1, imm:$imm12), (EXTRACT_SUBREG FPRFour:$rs1, (as_i16imm $imm12))>;
+
 //===----------------------------------------------------------------------===//
 // Standard extensions
 //===----------------------------------------------------------------------===//
