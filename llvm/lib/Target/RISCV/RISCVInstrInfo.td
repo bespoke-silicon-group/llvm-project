@@ -1452,6 +1452,12 @@ def : Pat<(binop_allwusers<add> GPR:$rs1, (AddiPair:$rs2)),
                  (AddiPairImmA AddiPair:$rs2))>;
 }
 
+let hasSideEffects = 1, mayLoad = 1, mayStore = 1,
+    isCodeGenOnly = 1, isAsmParserOnly = 0, usesCustomInserter=0 in
+def PseudoLoad4Exp : Pseudo<(outs FPRFour:$rd), (ins GPR:$rs1, GPR:$rs2), [], "flw4", "$rd, $rs1, $rs2">;
+
+def : Pat<(int_riscv_flw4 BaseAddr:$rs1, GPR:$rs2), (PseudoLoad4Exp BaseAddr:$rs1, GPR:$rs2)>;
+
 //===----------------------------------------------------------------------===//
 // Standard extensions
 //===----------------------------------------------------------------------===//
