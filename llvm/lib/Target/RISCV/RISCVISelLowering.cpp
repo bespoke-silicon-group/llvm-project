@@ -86,6 +86,8 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
   MVT XLenVT = Subtarget.getXLenVT();
 
+  // TODO: check for hb extension
+  addRegisterClass(MVT::v4f32, &RISCV::FPRFourRegClass);
   // Set up the register classes.
   addRegisterClass(XLenVT, &RISCV::GPRRegClass);
 
