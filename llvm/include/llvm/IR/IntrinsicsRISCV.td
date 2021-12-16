@@ -1282,4 +1282,13 @@ let TargetPrefix = "riscv" in {
                     [llvm_anyvector_ty, llvm_anyptr_ty,
                      llvm_anyint_ty, LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>],
                     [NoCapture<ArgIndex<1>>, IntrWriteMem]>;
+  
+  class flw4
+      : Intrinsic<
+      [llvm_anyvector_ty],
+      [llvm_ptr_ty, llvm_i32_ty],
+      [IntrArgMemOnly]>;
+
+  def int_riscv_flw4 : flw4;
+
 } // TargetPrefix = "riscv"
