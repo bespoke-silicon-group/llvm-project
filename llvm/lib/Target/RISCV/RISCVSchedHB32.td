@@ -131,6 +131,8 @@ def : WriteRes<WriteLDD, []>;
 def : WriteRes<WriteFMul64, []>;
 def : WriteRes<WriteFMulAdd64, []>;
 def : WriteRes<WriteFMulSub64, []>;
+def : WriteRes<WriteFMA64, []>;
+def : WriteRes<WriteFMA32, []>;
 def : WriteRes<WriteFDiv32, []>;
 def : WriteRes<WriteFDiv64, []>;
 def : WriteRes<WriteFSqrt32, []>;
@@ -144,6 +146,13 @@ def : WriteRes<WriteFCvtF64ToI64, []>;
 def : WriteRes<WriteFCvtF32ToI64, []>;
 def : WriteRes<WriteFMovI64ToF64, []>;
 def : WriteRes<WriteFMovF64ToI64, []>;
+def : WriteRes<WriteFMinMax64, []>;
+def : WriteRes<WriteFMinMax32, []>;
+def : WriteRes<WriteFSGNJ64, []>;
+def : WriteRes<WriteFSGNJ32, []>;
+def : WriteRes<WriteShiftReg, []>;
+def : WriteRes<WriteShiftImm32, []>;
+def : WriteRes<WriteShiftReg32, []>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -156,8 +165,10 @@ def : ReadAdvance<ReadStoreData, 0>;
 def : ReadAdvance<ReadMemBase, 0>;
 def : ReadAdvance<ReadIALU, 0>;
 def : ReadAdvance<ReadIALU32, 0>;
-def : ReadAdvance<ReadShift, 0>;
-def : ReadAdvance<ReadShift32, 0>;
+def : ReadAdvance<ReadShiftImm, 0>;
+def : ReadAdvance<ReadShiftReg, 0>;
+def : ReadAdvance<ReadShiftReg32, 0>;
+def : ReadAdvance<ReadShiftImm32, 0>;
 def : ReadAdvance<ReadIDiv, 0>;
 def : ReadAdvance<ReadIDiv32, 0>;
 def : ReadAdvance<ReadIMul, 0>;
@@ -170,8 +181,13 @@ def : ReadAdvance<ReadAtomicLDW, 0>;
 def : ReadAdvance<ReadAtomicLDD, 0>;
 def : ReadAdvance<ReadAtomicSTW, 0>;
 def : ReadAdvance<ReadAtomicSTD, 0>;
+def : ReadAdvance<ReadFMemBase, 0>;
+def : ReadAdvance<ReadFMinMax64, 0>;
+def : ReadAdvance<ReadFMinMax32, 0>;
 def : ReadAdvance<ReadFALU32, 0>;
 def : ReadAdvance<ReadFALU64, 0>;
+def : ReadAdvance<ReadFMA64, 0>;
+def : ReadAdvance<ReadFMA32, 0>;
 def : ReadAdvance<ReadFMul32, 0>;
 def : ReadAdvance<ReadFMulAdd32, 0>;
 def : ReadAdvance<ReadFMulSub32, 0>;
@@ -200,6 +216,8 @@ def : ReadAdvance<ReadFMovF64ToI64, 0>;
 def : ReadAdvance<ReadFMovI64ToF64, 0>;
 def : ReadAdvance<ReadFClass32, 0>;
 def : ReadAdvance<ReadFClass64, 0>;
+def : ReadAdvance<ReadFSGNJ32, 0>;
+def : ReadAdvance<ReadFSGNJ64, 0>;
 
 //===----------------------------------------------------------------------===//
 // Unsupported extensions

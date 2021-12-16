@@ -57,7 +57,6 @@ class RISCVSubtarget : public RISCVGenSubtargetInfo {
   bool HasRV64 = false;
   bool IsRV32E = false;
   bool EnableLinkerRelax = false;
-  bool EnableRVCHintInstrs = true;
   bool EnableSaveRestore = false;
   bool EnableRVCHintInstrs = false;
   bool NoFdiv = false;
@@ -104,7 +103,7 @@ public:
   }
   bool enableMachineScheduler() const override { return true; }
   void adjustSchedDependency (SUnit *Def, SUnit *Use, SDep &Dep
-                              ) const override;
+                              ) const;
   bool hasStdExtM() const { return HasStdExtM; }
   bool hasStdExtA() const { return HasStdExtA; }
   bool hasStdExtF() const { return HasStdExtF; }

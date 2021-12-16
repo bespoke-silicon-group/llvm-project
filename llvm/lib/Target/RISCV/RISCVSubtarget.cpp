@@ -19,7 +19,6 @@
 #include "RISCVTargetMachine.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
 
