@@ -171,6 +171,8 @@ def : WriteRes<WriteFSqrt64, [RocketUnitFPDivSqrt]> { let Latency = 25;
 def : WriteRes<WriteCSR, []>;
 def : WriteRes<WriteNop, []>;
 
+def : WriteRes<WriteLWD4, []> {let Unsupported = 1;}
+
 def : InstRW<[WriteIALU], (instrs COPY)>;
 
 //===----------------------------------------------------------------------===//

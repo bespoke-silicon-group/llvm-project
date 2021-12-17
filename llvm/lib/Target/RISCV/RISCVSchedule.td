@@ -26,6 +26,7 @@ def WriteLDB        : SchedWrite;    // Load byte
 def WriteLDH        : SchedWrite;    // Load half-word
 def WriteLDW        : SchedWrite;    // Load word
 def WriteLDWU       : SchedWrite;    // Load word unsigned
+def WriteLWD4       : SchedWrite;
 def WriteLDD        : SchedWrite;    // Load double-word
 def WriteCSR        : SchedWrite;    // CSR instructions
 def WriteSTB        : SchedWrite;    // Store byte
