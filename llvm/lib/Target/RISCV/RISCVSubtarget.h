@@ -102,8 +102,8 @@ public:
     return &TSInfo;
   }
   bool enableMachineScheduler() const override { return true; }
-  void adjustSchedDependency (SUnit *Def, SUnit *Use, SDep &Dep
-                              ) const;
+  void adjustSchedDependency(SUnit *Def, int DefOpIdx, SUnit *Use, int UseOpIdx,
+                             SDep &Dep) const override;
   bool hasStdExtM() const { return HasStdExtM; }
   bool hasStdExtA() const { return HasStdExtA; }
   bool hasStdExtF() const { return HasStdExtF; }

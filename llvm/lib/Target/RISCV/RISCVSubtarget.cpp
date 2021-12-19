@@ -168,8 +168,11 @@ bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
 }
 
 /// Target specific adjustments to scheduler dependencies
-void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
-                                            SDep &Dep) const {
+void RISCVSubtarget::adjustSchedDependency(SUnit *Def, int DefOpIdx, SUnit *Use,
+                                           int UseOpIdx, SDep &Dep) const {
+  llvm::errs() << "Adjust sched dep \n";
+  Def->getInstr()->dump();
+  Use->getInstr()->dump();
   MachineInstr *SrcInst = Def->getInstr();
   if (!Def->isInstr())
     return;
