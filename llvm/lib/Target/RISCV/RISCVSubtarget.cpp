@@ -170,12 +170,27 @@ bool RISCVSubtarget::useRVVForFixedLengthVectors() const {
 /// Target specific adjustments to scheduler dependencies
 void RISCVSubtarget::adjustSchedDependency(SUnit *Def, int DefOpIdx, SUnit *Use,
                                            int UseOpIdx, SDep &Dep) const {
-  llvm::errs() << "Adjust sched dep \n";
-  Def->getInstr()->dump();
-  Use->getInstr()->dump();
   MachineInstr *SrcInst = Def->getInstr();
   if (!Def->isInstr())
     return;
+
+  MachineRegisterInfo &MRI = SrcInst->getMF()->getRegInfo();
+  if (SrcInst->getOpcode() == RISCV::PseudoLoad4Exp) {
+    MachineInstr *DestInst = Use->getInstr();
+    auto DefOp = SrcInst->getOperand(0);
+    assert(DefOp.isReg() && "lwd4 should write to a register");
+    unsigned int HighestLatencySubReg = 0;
+    for (unsigned int i = 0; i < DestInst->getNumOperands(); i++) {
+      auto UseOp = DestInst->getOperand(i);
+      if (UseOp.isReg() &&
+          MRI.getRegClass(UseOp.getReg()) == MRI.getRegClass(DefOp.getReg())) {
+        HighestLatencySubReg =
+            std::max(HighestLatencySubReg, UseOp.getSubReg());
+      }
+    }
+    assert(HighestLatencySubReg > 0 && "Use of lwd4 def not found");
+    Dep.setLatency(Dep.getLatency() - (4 - HighestLatencySubReg));
+  }
 
   if (getCPU() == "hb-rv32") {
     // For HammerBlade Vanilla Subtarget, remote addresses are assigned
