@@ -60,6 +60,8 @@ def WriteFSqrt16    : SchedWrite;    // 16-bit floating point sqrt
 def WriteFSqrt32    : SchedWrite;    // 32-bit floating point sqrt
 def WriteFSqrt64    : SchedWrite;    // 64-bit floating point sqrt
 
+def WriteLWD4Add : WriteSequence<[WriteLWD4, WriteIALU]>;
+
 // Integer to float conversions
 def WriteFCvtI32ToF16  : SchedWrite;
 def WriteFCvtI32ToF32  : SchedWrite;
