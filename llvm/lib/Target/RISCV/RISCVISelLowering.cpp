@@ -86,11 +86,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
   MVT XLenVT = Subtarget.getXLenVT();
 
-  // TODO: check for hb extension
-  addRegisterClass(MVT::v4f32, &RISCV::FPRFourRegClass);
   // Set up the register classes.
   addRegisterClass(XLenVT, &RISCV::GPRRegClass);
 
+  if (Subtarget.hasStdExtHb())
+    addRegisterClass(MVT::v4f32, &RISCV::FPRFourRegClass);
   if (Subtarget.hasStdExtZfh())
     addRegisterClass(MVT::f16, &RISCV::FPR16RegClass);
   if (Subtarget.hasStdExtF())
@@ -181,8 +181,9 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   // TODO: add all necessary setOperationAction calls.
   setOperationAction(ISD::DYNAMIC_STACKALLOC, XLenVT, Expand);
 
-  // TODO: check for hb extension
-  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::v4i32, Custom);
+  if (Subtarget.hasStdExtHb())
+    setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::v4i32, Custom);
+
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
   setOperationAction(ISD::BR_CC, XLenVT, Expand);
   setOperationAction(ISD::BRCOND, MVT::Other, Custom);

@@ -135,6 +135,13 @@ def HasStdExtZbt : Predicate<"Subtarget->hasStdExtZbt()">,
                              AssemblerPredicate<(all_of FeatureStdExtZbt),
                              "'Zbt' (Ternary 'B' Instructions)">;
 
+def FeatureStdExtHb
+    : SubtargetFeature<"hb", "HasStdExtHb", "true",
+                       "'Hb' (Hammerblade Instructions)">;
+def HasStdExtHb : Predicate<"Subtarget->hasStdExtHb()">,
+                             AssemblerPredicate<(all_of FeatureStdExtHb),
+                             "'Hb' (Hammerblade Instructions)">;
+
 // Some instructions belong to both the basic and the permutation
 // subextensions. They should be enabled if either has been specified.
 def HasStdExtZbbOrZbp
@@ -306,7 +313,10 @@ def : ProcessorModel<"sifive-u74", SiFive7Model, [Feature64Bit,
                                                   FeatureStdExtD,
                                                   FeatureStdExtC]>;
 
-def : ProcessorModel<"hb-rv32", HB32Model, [FeatureStdExtM]>;
+def : ProcessorModel<"hb-rv32", HB32Model, [FeatureStdExtM,
+                                            FeatureStdExtA,
+                                            FeatureStdExtF,
+                                            FeatureStdExtHb]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.
