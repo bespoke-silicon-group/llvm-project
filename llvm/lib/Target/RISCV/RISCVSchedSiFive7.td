@@ -158,7 +158,8 @@ def : WriteRes<WriteFMovF64ToI64, [SiFive7PipeB]>;
 def : WriteRes<WriteCSR, [SiFive7PipeB]>;
 def : WriteRes<WriteNop, []>;
 
-def : WriteRes<WriteLWD4, []> {let Unsupported = 1;}
+def : WriteRes<WriteLWD4, []> { let Unsupported = 1; }
+def : WriteRes<WriteAdr, []> { let Unsupported = 1; }
 
 def : InstRW<[WriteIALU], (instrs COPY)>;
 

@@ -27,6 +27,7 @@ def WriteLDH        : SchedWrite;    // Load half-word
 def WriteLDW        : SchedWrite;    // Load word
 def WriteLDWU       : SchedWrite;    // Load word unsigned
 def WriteLWD4       : SchedWrite;
+def WriteAdr        : SchedWrite;
 def WriteLDD        : SchedWrite;    // Load double-word
 def WriteCSR        : SchedWrite;    // CSR instructions
 def WriteSTB        : SchedWrite;    // Store byte
@@ -59,8 +60,6 @@ def WriteFDiv64     : SchedWrite;    // 64-bit floating point divide
 def WriteFSqrt16    : SchedWrite;    // 16-bit floating point sqrt
 def WriteFSqrt32    : SchedWrite;    // 32-bit floating point sqrt
 def WriteFSqrt64    : SchedWrite;    // 64-bit floating point sqrt
-
-def WriteLWD4Add : WriteSequence<[WriteLWD4, WriteIALU]>;
 
 // Integer to float conversions
 def WriteFCvtI32ToF16  : SchedWrite;

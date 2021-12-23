@@ -84,7 +84,11 @@ def : WriteRes<WriteAtomicW, [HB32UnitMem]>;
 def : WriteRes<WriteAtomicLDW, [HB32UnitMem]>;
 }
 
+// Latency of all 4 loads
 def : WriteRes<WriteLWD4, [HB32UnitMem]> {let Latency = 5;}
+
+// Latency of address update after 4 loads
+def : WriteRes<WriteAdr, []> {let Latency = 1;}
 
 def : WriteRes<WriteAtomicSTW, [HB32UnitMem]>;
 
