@@ -11,11 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 let Predicates = [HasStdExtHb] in {
-
 let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in
-def PseudoLoad4Exp : Pseudo<(outs FPRFour:$rd),
+def PseudoLoad4Exp : RVInstR<0b0000000, 0b000, OPC_OP_HB, (outs FPRFour:$rd),
                             (ins GPR:$rs1, simm12:$imm12, GPR:$rs2),
-                            [], "flw4", "$rd, ${imm12}(${rs1}), $rs2">,
+                            "flw4", "$rd, ${imm12}(${rs1}), $rs2">,
                             Sched<[WriteLWD4, WriteAdr, ReadMemBase]>;
 }
 
