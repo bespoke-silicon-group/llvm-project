@@ -141,6 +141,7 @@ enum RISCVExtension : uint8_t {
   D = 1 << 2,
   Zfh = 1 << 3,
   Zvlsseg = 1 << 4,
+  Hb = 1 << 5,
 };
 
 // TODO refactor RVVIntrinsic class design after support all intrinsic

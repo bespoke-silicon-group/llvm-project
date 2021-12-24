@@ -15,7 +15,7 @@
 #   define TARGET_BUILTIN(ID, TYPE, ATTRS, FEATURE) BUILTIN(ID, TYPE, ATTRS)
 #endif
 
-TARGET_BUILTIN(__builtin_riscv_flw4, "V4fv*Zi", "n", "")
+TARGET_BUILTIN(__builtin_riscv_flw4, "V4fv*Zi", "n", "experimental-zhb")
 
 // Zbb extension
 TARGET_BUILTIN(__builtin_riscv_orc_b_32, "ZiZi", "nc", "experimental-zbb")

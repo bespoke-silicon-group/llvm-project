@@ -136,7 +136,7 @@ def HasStdExtZbt : Predicate<"Subtarget->hasStdExtZbt()">,
                              "'Zbt' (Ternary 'B' Instructions)">;
 
 def FeatureStdExtHb
-    : SubtargetFeature<"hb", "HasStdExtHb", "true",
+    : SubtargetFeature<"experimental-zhb", "HasStdExtHb", "true",
                        "'Hb' (Hammerblade Instructions)">;
 def HasStdExtHb : Predicate<"Subtarget->hasStdExtHb()">,
                              AssemblerPredicate<(all_of FeatureStdExtHb),

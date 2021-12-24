@@ -3809,8 +3809,6 @@ bool Sema::CheckRISCVLMUL(CallExpr *TheCall, unsigned ArgNum) {
 bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
                                          unsigned BuiltinID,
                                          CallExpr *TheCall) {
-  // TODO: Remove this hack by adding a hb extention
-  return false;
   // CodeGenFunction can also detect this, but this gives a better error
   // message.
   bool FeatureMissing = false;
