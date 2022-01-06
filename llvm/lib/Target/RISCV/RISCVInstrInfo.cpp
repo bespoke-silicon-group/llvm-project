@@ -263,6 +263,8 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     MachineInstr &UseMI = *MRI.use_instr_nodbg_begin(DstReg);
     if (UseMI.getOpcode() == RISCV::PseudoLoad4Exp) {
       UseMI.substituteRegister(DstReg, SrcReg, 0, *TRI);
+      UseMI.getOperand(1).setIsDead(false);
+      UseMI.getOperand(2).setIsKill(false);
       (*MBBI).substituteRegister(DstReg, SrcReg, 0, *TRI);
     } else BuildMI(MBB, MBBI, DL, get(RISCV::ADDI), DstReg)
           .addReg(SrcReg, getKillRegState(KillSrc))
