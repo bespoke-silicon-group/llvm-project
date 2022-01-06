@@ -255,10 +255,18 @@ void RISCVInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator MBBI,
                                  const DebugLoc &DL, MCRegister DstReg,
                                  MCRegister SrcReg, bool KillSrc) const {
+  MachineFunction* MF = MBB.getParent();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
+
   if (RISCV::GPRRegClass.contains(DstReg, SrcReg)) {
-    BuildMI(MBB, MBBI, DL, get(RISCV::ADDI), DstReg)
-        .addReg(SrcReg, getKillRegState(KillSrc))
-        .addImm(0);
+    MachineInstr &UseMI = *MRI.use_instr_nodbg_begin(DstReg);
+    if (UseMI.getOpcode() == RISCV::PseudoLoad4Exp) {
+      UseMI.substituteRegister(DstReg, SrcReg, 0, *TRI);
+      (*MBBI).substituteRegister(DstReg, SrcReg, 0, *TRI);
+    } else BuildMI(MBB, MBBI, DL, get(RISCV::ADDI), DstReg)
+          .addReg(SrcReg, getKillRegState(KillSrc))
+          .addImm(0);
     return;
   }
 
