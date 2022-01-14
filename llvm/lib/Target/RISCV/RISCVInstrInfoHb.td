@@ -16,6 +16,12 @@ def PseudoLoad4Exp : RVInstR<0b0000000, 0b000, OPC_OP_HB, (outs FPRFour:$rd, GPR
                             (ins GPR:$rs1, simm12:$imm12, GPR:$rs2),
                             "flw4", "$rd, ${imm12}(${rs1}), $rs2">,
                             Sched<[WriteLWD4, WriteAdr, ReadMemBase]>;
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Constraints = "$rs1 = $wb" in
+def LoadRegReg : RVInstR<0b0000000, 0b001, OPC_OP_HB, (outs FPR32:$rd, GPR:$wb),
+                            (ins GPR:$rs1, GPR:$rs2),
+                            "lwr", "$rd, $rs1, $rs2">,
+                            Sched<[WriteLDW, WriteAdr, ReadMemBase, ReadMemBase]>;
 }
 
 def : Pat<(int_riscv_flw4 BaseAddr:$rs1, GPR:$rs2),
