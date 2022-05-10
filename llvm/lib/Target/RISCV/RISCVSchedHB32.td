@@ -53,7 +53,7 @@ def : WriteRes<WriteJmpReg, [HB32UnitB]>;
 def : WriteRes<WriteIALU, [HB32UnitALU]>;
 def : WriteRes<WriteShift, [HB32UnitALU]>;
 
-def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 32; }
+def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 4; }
 
 // 32-bit divides take 32+ cycles, TODO(Emily): we maybe want to determine worst case
 def : WriteRes<WriteIDiv, [HB32UnitIDiv]> {
