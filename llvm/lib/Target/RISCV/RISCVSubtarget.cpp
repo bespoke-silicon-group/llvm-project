@@ -93,7 +93,9 @@ void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
     ArrayRef<MachineMemOperand*> memops = SrcInst->memoperands();
     if (SrcInst->mayLoad() &&
         !memops.empty() && memops[0]->getAddrSpace() == 1) {
-      Dep.setLatency(20);
+      // The load latency will increase the gap between load/store pairs
+      // forcing utilization of more registers 
+      Dep.setLatency(32);
     }
   }
 }
