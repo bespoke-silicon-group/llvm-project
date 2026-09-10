@@ -114,6 +114,15 @@ def : WriteRes<WriteFMulAdd32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulSub32, [HB32UnitFPALU]>;
 }
 
+// The non-pipelined FP divide/square-root unit occupies EXE for one cycle and
+// the iterative HardFloat unit for 25 cycles.  Match the bsg_vanilla_2020 GCC
+// schedule: a dependent instruction observes 26 cycles of latency, while a
+// second divide or square root cannot issue for 25 cycles.
+let Latency = 26, ResourceCycles = [25] in {
+def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]>;
+def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]>;
+}
+
 def : WriteRes<WriteNop, []>;
 
 def : InstRW<[WriteIALU], (instrs COPY)>;
@@ -130,9 +139,7 @@ def : WriteRes<WriteLDD, []>;
 def : WriteRes<WriteFMul64, []>;
 def : WriteRes<WriteFMulAdd64, []>;
 def : WriteRes<WriteFMulSub64, []>;
-def : WriteRes<WriteFDiv32, []>;
 def : WriteRes<WriteFDiv64, []>;
-def : WriteRes<WriteFSqrt32, []>;
 def : WriteRes<WriteFSqrt64, []>;
 def : WriteRes<WriteAtomicD, []>;
 def : WriteRes<WriteAtomicLDD, []>;
