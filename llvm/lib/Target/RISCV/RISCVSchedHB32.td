@@ -53,9 +53,13 @@ def : WriteRes<WriteJmpReg, [HB32UnitB]>;
 def : WriteRes<WriteIALU, [HB32UnitALU]>;
 def : WriteRes<WriteShift, [HB32UnitALU]>;
 
-def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 32; }
+// The integer multiply result is registered once in fpu_float_fma and is
+// forwarded from MEM.  A dependent instruction can issue after 2 cycles.
+def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 2; }
 
-// 32-bit divides take 32+ cycles, TODO(Emily): we maybe want to determine worst case
+// The current BaseJump divider has data-dependent setup/repair states.  Keep
+// this legacy heuristic until dependent-use and back-to-back issue are
+// calibrated through the full Vanilla core.
 def : WriteRes<WriteIDiv, [HB32UnitIDiv]> {
   let Latency = 32;
   let ResourceCycles = [32];
@@ -69,14 +73,14 @@ def : WriteRes<WriteFST32, [HB32UnitMem]>;
 def : WriteRes<WriteFST64, [HB32UnitMem]>;
 
 let Latency = 3 in {
-def : WriteRes<WriteLDB, [HB32UnitMem]>;
-def : WriteRes<WriteLDH, [HB32UnitMem]>;
 def : WriteRes<WriteCSR, [HB32UnitALU]>;
+def : WriteRes<WriteFLD32, [HB32UnitMem]>;
 }
 
 let Latency = 2 in {
+def : WriteRes<WriteLDB, [HB32UnitMem]>;
+def : WriteRes<WriteLDH, [HB32UnitMem]>;
 def : WriteRes<WriteLDW, [HB32UnitMem]>;
-def : WriteRes<WriteFLD32, [HB32UnitMem]>;
 def : WriteRes<WriteFLD64, [HB32UnitMem]>;
 
 def : WriteRes<WriteAtomicW, [HB32UnitMem]>;
@@ -85,30 +89,39 @@ def : WriteRes<WriteAtomicLDW, [HB32UnitMem]>;
 
 def : WriteRes<WriteAtomicSTW, [HB32UnitMem]>;
 
-// Most FP single precision operations are 4 cycles
-def : WriteRes<WriteFALU32, [HB32UnitFPALU]> { let Latency = 4; }
+// Single-precision FP-to-FP operations use the two registered fpu_float
+// stages after issue/FP execute, for a dependent-use latency of 3 cycles.
+def : WriteRes<WriteFALU32, [HB32UnitFPALU]> { let Latency = 3; }
 
 // Most FP double precision operations are 6 cycles
 def : WriteRes<WriteFALU64, [HB32UnitFPALU]> { let Latency = 6; }
 
-let Latency = 2 in {
+// Integer-to-FP32 conversion and moves use the two-stage fpu_float_aux path.
+let Latency = 3 in {
 def : WriteRes<WriteFCvtI32ToF32, [HB32UnitFPALU]>;
+def : WriteRes<WriteFMovI32ToF32, [HB32UnitFPALU]>;
+}
+
+let Latency = 2 in {
 def : WriteRes<WriteFCvtI32ToF64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFCvtF32ToI32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFCvtF64ToI32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFCvtF32ToF64, [HB32UnitFPALU]>;
 def : WriteRes<WriteFCvtF64ToF32, [HB32UnitFPALU]>;
 
-def : WriteRes<WriteFClass32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFClass64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFCmp32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFCmp64, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMovF32ToI32, [HB32UnitFPALU]>;
-def : WriteRes<WriteFMovI32ToF32, [HB32UnitFPALU]>;
 }
 
-//FPU takes 4 cycles (TODO: confirm this)
-let Latency = 4 in {
+// FP32-to-integer operations are combinational in fpu_int and feed the
+// normal integer result/forwarding path.
+let Latency = 1 in {
+def : WriteRes<WriteFCvtF32ToI32, [HB32UnitFPALU]>;
+def : WriteRes<WriteFClass32, [HB32UnitFPALU]>;
+def : WriteRes<WriteFCmp32, [HB32UnitFPALU]>;
+def : WriteRes<WriteFMovF32ToI32, [HB32UnitFPALU]>;
+}
+
+let Latency = 3 in {
 def : WriteRes<WriteFMul32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulAdd32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulSub32, [HB32UnitFPALU]>;
