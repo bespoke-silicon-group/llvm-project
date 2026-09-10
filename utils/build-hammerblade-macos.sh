@@ -1,8 +1,6 @@
 #!/bin/sh
 
-# Build the LLVM/Clang components required by HammerBlade on macOS.
-# The full LLVM 10 `install` target includes optional host utilities that are
-# unrelated to HammerBlade and no longer all compile with current Apple Clang.
+# Build and install the HammerBlade LLVM/Clang toolchain on macOS.
 
 set -eu
 
@@ -41,12 +39,7 @@ fi
   -DLLVM_ENABLE_ZLIB=OFF
 
 "$hb_llvm_cmake" --build "$hb_llvm_build" \
-  --target clang llc opt --parallel "$hb_llvm_jobs"
-
-# install-clang does not install the builtin headers on this old tree. They
-# are required for newlib headers that include stddef.h and related headers.
-"$hb_llvm_cmake" --build "$hb_llvm_build" \
-  --target install-clang install-clang-resource-headers install-llc install-opt \
+  --target install \
   --parallel "$hb_llvm_jobs"
 
 "$hb_llvm_install/bin/clang" --version

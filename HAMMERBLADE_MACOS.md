@@ -15,11 +15,11 @@ The default build and installation directories are
 Override them with `HB_LLVM_BUILD_DIR` and `HB_LLVM_INSTALL_DIR`. Override the
 CMake executable with `HB_LLVM_CMAKE` when it is not on `PATH`.
 
-The script builds and installs only the components used by HammerBlade:
-Clang, Clang's builtin resource headers, `llc`, and `opt`. It intentionally
-does not use LLVM's full `install` target. Optional LLVM 10 host tools such as
-`sancov` do not all compile with current Apple Clang, and they are not part of
-the HammerBlade device compilation path.
+The script performs a complete install of the configured LLVM/Clang tree,
+including Clang's builtin resource headers. The `hb-dev` source needed a small
+source-compatibility repair in `sancov` for the explicit `std::string`
+conversion enforced by current libc++; the full install then completed with
+Apple Clang 21 on arm64 macOS 26.4.
 
 ## HammerBench integration
 
