@@ -2,8 +2,9 @@
 # RUN:   -instruction-tables < %s | FileCheck %s
 
 # Verify the fixed-latency portions of the HammerBlade machine model against
-# the current Vanilla core pipeline.  Remote loads and integer division are
-# deliberately absent because their current RTL latency is variable.
+# the current Vanilla core pipeline.  Integer division uses the calibrated
+# worst-case latency because its current RTL latency is data dependent.  Remote
+# loads remain absent because their latency depends on the destination/path.
 
 mul a0, a1, a2
 lb a0, 0(a1)
@@ -21,6 +22,8 @@ fcvt.s.w ft0, a0
 fmv.w.x ft0, a0
 fdiv.s ft0, ft1, ft2
 fsqrt.s ft0, ft1
+div a0, a1, a2
+csrrs a0, fflags, zero
 
 # CHECK-LABEL: Instruction Info:
 # CHECK: 1{{ +}}2{{ +}}1.00{{ +}}mul
@@ -37,5 +40,7 @@ fsqrt.s ft0, ft1
 # CHECK: 1{{ +}}1{{ +}}1.00{{ +}}fmv.x.w
 # CHECK: 1{{ +}}3{{ +}}1.00{{ +}}fcvt.s.w
 # CHECK: 1{{ +}}3{{ +}}1.00{{ +}}fmv.w.x
-# CHECK: 1{{ +}}26{{ +}}25.00{{ +}}fdiv.s
-# CHECK: 1{{ +}}26{{ +}}25.00{{ +}}fsqrt.s
+# CHECK: 1{{ +}}15{{ +}}16.00{{ +}}fdiv.s
+# CHECK: 1{{ +}}14{{ +}}15.00{{ +}}fsqrt.s
+# CHECK: 1{{ +}}42{{ +}}42.00{{ +}}div
+# CHECK: 1{{ +}}1{{ +}}1.00{{.*}}frflags

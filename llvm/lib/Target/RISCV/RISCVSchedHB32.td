@@ -57,12 +57,12 @@ def : WriteRes<WriteShift, [HB32UnitALU]>;
 // forwarded from MEM.  A dependent instruction can issue after 2 cycles.
 def : WriteRes<WriteIMul, [HB32UnitIMul]> { let Latency = 2; }
 
-// The current BaseJump divider has data-dependent setup/repair states.  Keep
-// this legacy heuristic until dependent-use and back-to-back issue are
-// calibrated through the full Vanilla core.
+// The current one-bit-per-iteration BaseJump divider has data-dependent
+// setup/repair states.  Full-core traces observe up to 42 cycles for signed
+// negative operands, both for dependent use and back-to-back acceptance.
 def : WriteRes<WriteIDiv, [HB32UnitIDiv]> {
-  let Latency = 32;
-  let ResourceCycles = [32];
+  let Latency = 42;
+  let ResourceCycles = [42];
 }
 
 // Memory
@@ -73,9 +73,11 @@ def : WriteRes<WriteFST32, [HB32UnitMem]>;
 def : WriteRes<WriteFST64, [HB32UnitMem]>;
 
 let Latency = 3 in {
-def : WriteRes<WriteCSR, [HB32UnitALU]>;
 def : WriteRes<WriteFLD32, [HB32UnitMem]>;
 }
+
+// CSR reads feed the integer result path without an intervening stall.
+def : WriteRes<WriteCSR, [HB32UnitALU]> { let Latency = 1; }
 
 let Latency = 2 in {
 def : WriteRes<WriteLDB, [HB32UnitMem]>;
@@ -127,13 +129,16 @@ def : WriteRes<WriteFMulAdd32, [HB32UnitFPALU]>;
 def : WriteRes<WriteFMulSub32, [HB32UnitFPALU]>;
 }
 
-// The non-pipelined FP divide/square-root unit occupies EXE for one cycle and
-// the iterative HardFloat unit for 25 cycles.  Match the bsg_vanilla_2020 GCC
-// schedule: a dependent instruction observes 26 cycles of latency, while a
-// second divide or square root cannot issue for 25 cycles.
-let Latency = 26, ResourceCycles = [25] in {
-def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]>;
-def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]>;
+// The current two-result-bits-per-iteration HardFloat implementation is
+// non-pipelined.  Full-core dependency and independent-result traces separate
+// the producer latency from the unit's acceptance interval.
+def : WriteRes<WriteFDiv32, [HB32UnitFPDivSqrt]> {
+  let Latency = 15;
+  let ResourceCycles = [16];
+}
+def : WriteRes<WriteFSqrt32, [HB32UnitFPDivSqrt]> {
+  let Latency = 14;
+  let ResourceCycles = [15];
 }
 
 def : WriteRes<WriteNop, []>;
