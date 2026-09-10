@@ -15,6 +15,22 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscvtti"
 
+void RISCVTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
+                                           TTI::UnrollingPreferences &UP) {
+  BaseT::getUnrollingPreferences(L, SE, UP);
+
+  if (ST->getCPU() != "hb-rv32")
+    return;
+
+  // HammerBlade has no hardware loop buffer, but its single-issue in-order
+  // core still benefits from reducing loop-control and address-generation
+  // work.  Enable compile-time partial unrolling with a conservative target
+  // threshold without pretending that the hardware buffers loops.  The lower
+  // threshold also limits instruction-cache growth on HammerBlade.
+  UP.Partial = true;
+  UP.PartialThreshold = 100;
+}
+
 int RISCVTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty) {
   assert(Ty->isIntegerTy() &&
          "getIntImmCost can only estimate cost of materialising integers");

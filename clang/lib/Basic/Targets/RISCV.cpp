@@ -17,6 +17,25 @@
 using namespace clang;
 using namespace clang::targets;
 
+bool RISCVTargetInfo::isValidCPUName(StringRef Name) const {
+  if (getTriple().getArch() == llvm::Triple::riscv32)
+    return Name == "generic-rv32" || Name == "rocket-rv32" ||
+           Name == "hb-rv32";
+  return Name == "generic-rv64" || Name == "rocket-rv64";
+}
+
+void RISCVTargetInfo::fillValidCPUList(
+    SmallVectorImpl<StringRef> &Values) const {
+  if (getTriple().getArch() == llvm::Triple::riscv32) {
+    Values.push_back("generic-rv32");
+    Values.push_back("rocket-rv32");
+    Values.push_back("hb-rv32");
+    return;
+  }
+  Values.push_back("generic-rv64");
+  Values.push_back("rocket-rv64");
+}
+
 ArrayRef<const char *> RISCVTargetInfo::getGCCRegNames() const {
   static const char *const GCCRegNames[] = {
       // Integer registers
