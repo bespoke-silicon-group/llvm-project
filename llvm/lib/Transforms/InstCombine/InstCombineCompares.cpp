@@ -6047,6 +6047,28 @@ Instruction *InstCombiner::visitFCmpInst(FCmpInst &I) {
                                   SQ.getWithInstruction(&I)))
     return replaceInstUsesWith(I, V);
 
+  // sqrt is monotonic for non-negative inputs. Under approximate-function and
+  // no-NaN semantics, compare its inputs directly. The afn requirement permits
+  // changing a comparison at a rounded sqrt boundary; nnan permits ignoring
+  // negative inputs, whose square roots would otherwise be NaNs.
+  Value *SqrtX, *SqrtY;
+  if (I.hasNoNaNs() && I.getFastMathFlags().approxFunc() &&
+      match(Op0, m_Intrinsic<Intrinsic::sqrt>(m_Value(SqrtX))) &&
+      match(Op1, m_Intrinsic<Intrinsic::sqrt>(m_Value(SqrtY)))) {
+    auto *NewCmp = new FCmpInst(Pred, SqrtX, SqrtY, "", &I);
+    NewCmp->copyFastMathFlags(&I);
+    return NewCmp;
+  }
+
+  // A finite, non-NaN sqrt is less than positive infinity. This commonly
+  // removes the first iteration's infinity sentinel in minimum-distance code.
+  const APFloat *Infinity;
+  if (Pred == FCmpInst::FCMP_OLT && I.hasNoNaNs() && I.hasNoInfs() &&
+      match(Op0, m_Intrinsic<Intrinsic::sqrt>(m_Value())) &&
+      match(Op1, m_APFloat(Infinity)) && Infinity->isInfinity() &&
+      !Infinity->isNegative())
+    return replaceInstUsesWith(I, Builder.getTrue());
+
   // Simplify 'fcmp pred X, X'
   Type *OpType = Op0->getType();
   assert(OpType == Op1->getType() && "fcmp with different-typed operands?");
