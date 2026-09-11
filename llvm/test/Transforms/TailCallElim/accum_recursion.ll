@@ -1,5 +1,7 @@
 ; RUN: opt < %s -tailcallelim -verify-dom-info -S | FileCheck %s
 ; RUN: opt < %s -passes=tailcallelim -verify-dom-info -S | FileCheck %s
+; RUN: opt < %s -tailcallelim -tailcallelim -verify-dom-info -S | FileCheck %s
+; RUN: opt < %s -passes='tailcallelim,tailcallelim' -verify-dom-info -S | FileCheck %s
 
 define i32 @test1_factorial(i32 %x) {
 entry:
@@ -45,7 +47,7 @@ define i64 @test3_fib(i64 %n) nounwind readnone {
 ; CHECK-LABEL: @test3_fib(
 entry:
 ; CHECK: tailrecurse:
-; CHECK: %accumulator.tr = phi i64 [ %n, %entry ], [ %3, %bb1 ]
+; CHECK: %accumulator.tr = phi i64 [ 0, %entry ], [ %3, %bb1 ]
 ; CHECK: %n.tr = phi i64 [ %n, %entry ], [ %2, %bb1 ]
   switch i64 %n, label %bb1 [
 ; CHECK: switch i64 %n.tr, label %bb1 [
@@ -71,5 +73,39 @@ bb1:
 bb2:
 ; CHECK: bb2:
   ret i64 %n
-; CHECK: ret i64 %accumulator.tr
+; CHECK: %accumulator.ret = add nsw i64 %n.tr, %accumulator.tr
+; CHECK: ret i64 %accumulator.ret
+}
+
+; Different base values use the add identity as the initial accumulator and
+; combine the selected base value when the loop exits.
+define i32 @test4_fib_distinct_bases(i32 %n) nounwind readnone {
+; CHECK-LABEL: @test4_fib_distinct_bases(
+entry:
+; CHECK: %accumulator.tr = phi i32 [ 0, %entry ], [ %sum, %recur ]
+  switch i32 %n, label %recur [
+    i32 0, label %zero
+    i32 1, label %one
+  ]
+
+zero:
+; CHECK: %accumulator.ret = add nsw i32 0, %accumulator.tr
+; CHECK: ret i32 %accumulator.ret
+  ret i32 0
+
+one:
+; CHECK: %accumulator.ret1 = add nsw i32 1, %accumulator.tr
+; CHECK: ret i32 %accumulator.ret1
+  ret i32 1
+
+recur:
+  %n1 = add nsw i32 %n, -1
+  %lhs = tail call i32 @test4_fib_distinct_bases(i32 %n1)
+  %n2 = add nsw i32 %n, -2
+  %rhs = tail call i32 @test4_fib_distinct_bases(i32 %n2)
+  %sum = add nsw i32 %rhs, %lhs
+; CHECK-NOT: %rhs = tail call
+; CHECK: %sum = add nsw i32 %accumulator.tr, %lhs
+; CHECK: br label %tailrecurse
+  ret i32 %sum
 }

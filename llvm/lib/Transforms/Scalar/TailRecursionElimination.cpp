@@ -17,7 +17,9 @@
 //  2. This pass transforms functions that are prevented from being tail
 //     recursive by an associative and commutative expression to use an
 //     accumulator variable, thus compiling the typical naive factorial or
-//     'fib' implementation into efficient code.
+//     'fib' implementation into efficient code. If the base returns differ,
+//     the accumulator starts at the operator identity and is combined with
+//     the selected base value at the exit.
 //  3. TRE is performed if the function returns void, if the return
 //     returns the result returned by the call, or if the function returns a
 //     run-time constant on all exits from the function.  It is possible, though
@@ -384,8 +386,14 @@ static bool isDynamicConstant(Value *V, CallInst *CI, ReturnInst *RI) {
   // effectively constant.
   if (BasicBlock *UniquePred = RI->getParent()->getUniquePredecessor())
     if (SwitchInst *SI = dyn_cast<SwitchInst>(UniquePred->getTerminator()))
-      if (SI->getCondition() == V)
-        return SI->getDefaultDest() != RI->getParent();
+      if (SI->getCondition() == V && SI->getDefaultDest() != RI->getParent()) {
+        // The condition is constant on this edge only if exactly one case
+        // reaches the return. Multiple case labels may share a destination.
+        unsigned MatchingCases = 0;
+        for (auto Case : SI->cases())
+          MatchingCases += Case.getCaseSuccessor() == RI->getParent();
+        return MatchingCases == 1;
+      }
 
   // Not a constant or immutable argument, we can't safely transform.
   return false;
@@ -420,7 +428,8 @@ static Value *getCommonReturnValue(ReturnInst *IgnoreRI, CallInst *CI) {
 /// If the specified instruction can be transformed using accumulator recursion
 /// elimination, return the constant which is the start of the accumulator
 /// value.  Otherwise return null.
-static Value *canTransformAccumulatorRecursion(Instruction *I, CallInst *CI) {
+static Value *canTransformAccumulatorRecursion(Instruction *I, CallInst *CI,
+                                               bool &UseIdentity) {
   if (!I->isAssociative() || !I->isCommutative()) return nullptr;
   assert(I->getNumOperands() == 2 &&
          "Associative/commutative operations should have 2 args!");
@@ -430,14 +439,33 @@ static Value *canTransformAccumulatorRecursion(Instruction *I, CallInst *CI) {
       (I->getOperand(0) != CI && I->getOperand(1) != CI))
     return nullptr;
 
+  // Do not accumulator-convert a recursion that a previous invocation of this
+  // pass has already converted. Its non-call operand is the accumulator PHI,
+  // and this instruction is the PHI's loop-back value. This matters when IR is
+  // deliberately optimized by more than one pipeline.
+  Value *OtherOperand = I->getOperand(I->getOperand(0) == CI);
+  if (auto *PN = dyn_cast<PHINode>(OtherOperand))
+    if (is_contained(PN->incoming_values(), I))
+      return nullptr;
+
   // The only user of this instruction we allow is a single return instruction.
   if (!I->hasOneUse() || !isa<ReturnInst>(I->user_back()))
     return nullptr;
 
-  // Ok, now we have to check all of the other return instructions in this
-  // function.  If they return non-constants or differing values, then we cannot
-  // transform the function safely.
-  return getCommonReturnValue(cast<ReturnInst>(I->user_back()), CI);
+  // Prefer the historical form, which seeds the accumulator with the common
+  // base value and can return the accumulator directly.
+  if (Value *Common =
+          getCommonReturnValue(cast<ReturnInst>(I->user_back()), CI))
+    return Common;
+
+  // When base returns differ, seed with the operator identity. The selected
+  // base value will be combined with the accumulator at its actual exit.
+  Constant *Identity =
+      ConstantExpr::getBinOpIdentity(I->getOpcode(), I->getType());
+  if (!Identity)
+    return nullptr;
+  UseIdentity = true;
+  return Identity;
 }
 
 static Instruction *firstNonDbg(BasicBlock::iterator I) {
@@ -513,6 +541,7 @@ static bool eliminateRecursiveTailCall(
   // special case of accumulator recursion, the operation being "return C".
   Value *AccumulatorRecursionEliminationInitVal = nullptr;
   Instruction *AccumulatorRecursionInstr = nullptr;
+  bool UseAccumulatorIdentity = false;
 
   // Ok, we found a potential tail call.  We can currently only transform the
   // tail call if all of the instructions between the call and the return are
@@ -528,7 +557,8 @@ static bool eliminateRecursiveTailCall(
     // using accumulator recursion elimination.  Check to see if this is the
     // case, and if so, remember the initial accumulator value for later.
     if ((AccumulatorRecursionEliminationInitVal =
-             canTransformAccumulatorRecursion(&*BBI, CI))) {
+             canTransformAccumulatorRecursion(&*BBI, CI,
+                                              UseAccumulatorIdentity))) {
       // Yes, this is accumulator recursion.  Remember which instruction
       // accumulates.
       AccumulatorRecursionInstr = &*BBI;
@@ -663,12 +693,23 @@ static bool eliminateRecursiveTailCall(
       AccPN->addIncoming(Ret->getReturnValue(), BB);
     }
 
-    // Finally, rewrite any return instructions in the program to return the PHI
-    // node instead of the "initval" that they do currently.  This loop will
-    // actually rewrite the return value we are destroying, but that's ok.
-    for (BasicBlock &BBI : *F)
-      if (ReturnInst *RI = dyn_cast<ReturnInst>(BBI.getTerminator()))
+    // Finally, rewrite return instructions. With a common base value, the base
+    // is already folded into the accumulator seed. With an identity seed,
+    // preserve the selected base value by combining it at the actual exit.
+    for (BasicBlock &BBI : *F) {
+      ReturnInst *RI = dyn_cast<ReturnInst>(BBI.getTerminator());
+      if (!RI || RI == Ret)
+        continue;
+      if (!UseAccumulatorIdentity) {
         RI->setOperand(0, AccPN);
+        continue;
+      }
+      auto *ExitAcc = BinaryOperator::Create(
+          cast<BinaryOperator>(AccRecInstr)->getOpcode(), RI->getReturnValue(),
+          AccPN, "accumulator.ret", RI);
+      ExitAcc->copyIRFlags(AccRecInstr);
+      RI->setOperand(0, ExitAcc);
+    }
     ++NumAccumAdded;
   }
 
