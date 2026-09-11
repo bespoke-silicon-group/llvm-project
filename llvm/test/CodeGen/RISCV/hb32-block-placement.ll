@@ -4,11 +4,12 @@
 ; RUN:   -o /dev/null < %s 2>&1 | FileCheck %s --check-prefix=GENERIC
 ;
 ; HammerBlade's static backward-taken/forward-not-taken predictor favors the
-; natural SelectionDAG loop layout. Disable generic machine block placement
-; only for hb-rv32; standard RISC-V targets retain the pass.
+; natural SelectionDAG loop layout for branch-dense functions. Keep machine
+; block placement in the pipeline so the hb-rv32 subtarget can retain it for
+; large or instruction-dense functions. Standard RISC-V always enables it.
 ;
 ; HB: RISCV DAG->DAG Pattern Instruction Selection
-; HB-NOT: Branch Probability Basic Block Placement
+; HB: Branch Probability Basic Block Placement
 ; GENERIC: Branch Probability Basic Block Placement
 
 define void @empty() {

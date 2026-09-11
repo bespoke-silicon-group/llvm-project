@@ -17,6 +17,7 @@
 #include "RISCVLegalizerInfo.h"
 #include "RISCVRegisterBankInfo.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -77,6 +78,19 @@ const LegalizerInfo *RISCVSubtarget::getLegalizerInfo() const {
 
 const RegisterBankInfo *RISCVSubtarget::getRegBankInfo() const {
   return RegBankInfo.get();
+}
+
+bool RISCVSubtarget::enableMachineBlockPlacement(
+    const MachineFunction &MF) const {
+  // Vanilla predicts backward branches taken and forward branches not taken.
+  // On branch-dense CFGs, preserving SelectionDAG's natural loop layout
+  // avoids rotations that can turn common loop paths into backward not-taken
+  // branches. Retain generic placement for very large CFGs or code with more
+  // than 20 machine instructions per block, where fallthrough-chain formation
+  // is worthwhile.
+  return getCPU() != "hb-rv32" ||
+         MF.size() > 64 ||
+         MF.getInstructionCount() > 20 * MF.size();
 }
 
 /// Target specific adjustments to scheduler dependencies

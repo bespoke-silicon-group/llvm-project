@@ -83,6 +83,7 @@ public:
     return &TSInfo;
   }
   bool enableMachineScheduler() const override { return true; }
+  bool enableMachineBlockPlacement(const MachineFunction &MF) const override;
   void adjustSchedDependency (SUnit *Def, SUnit *Use, SDep &Dep
                               ) const override;
   bool hasStdExtM() const { return HasStdExtM; }

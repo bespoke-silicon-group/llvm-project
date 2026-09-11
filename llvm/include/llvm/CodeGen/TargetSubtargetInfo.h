@@ -33,6 +33,7 @@ class InstrItineraryData;
 struct InstrStage;
 class InstructionSelector;
 class LegalizerInfo;
+class MachineFunction;
 class MachineInstr;
 struct MachineSchedPolicy;
 struct MCReadAdvanceEntry;
@@ -209,6 +210,13 @@ public:
   /// True if the subtarget should run a machine scheduler after register
   /// allocation.
   virtual bool enablePostRAMachineScheduler() const;
+
+  /// Return false when target-specific branch prediction makes generic
+  /// probability-driven machine block placement undesirable for this
+  /// function.
+  virtual bool enableMachineBlockPlacement(const MachineFunction &MF) const {
+    return true;
+  }
 
   /// True if the subtarget should run the atomic expansion pass.
   virtual bool enableAtomicExpand() const;
