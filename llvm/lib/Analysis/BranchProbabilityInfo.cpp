@@ -698,8 +698,25 @@ bool BranchProbabilityInfo::calcZeroHeuristics(const BasicBlock *BB,
 
   Value *RHS = CI->getOperand(1);
   ConstantInt *CV = GetConstantInt(RHS);
-  if (!CV)
-    return false;
+
+  // HammerBlade's statically predicted in-order core is sensitive to arbitrary
+  // 50/50 layout ties.  Equality between two unconstrained integer values is
+  // usually less likely than inequality, so give this target's remaining
+  // equality comparisons a bias after stronger pointer and loop heuristics.
+  if (!CV) {
+    Attribute CPU = BB->getParent()->getFnAttribute("target-cpu");
+    if (!CPU.isStringAttribute() || CPU.getValueAsString() != "hb-rv32" ||
+        !CI->isEquality() || CI->getOperand(0)->getType()->isIntegerTy(1))
+      return false;
+
+    bool IsProb = CI->getPredicate() == CmpInst::ICMP_NE;
+    unsigned TakenIdx = IsProb ? 0 : 1;
+    unsigned NonTakenIdx = IsProb ? 1 : 0;
+    BranchProbability TakenProb(9, 10);
+    setEdgeProbability(BB, TakenIdx, TakenProb);
+    setEdgeProbability(BB, NonTakenIdx, TakenProb.getCompl());
+    return true;
+  }
 
   // If the LHS is the result of AND'ing a value with a single bit bitmask,
   // we don't have information about probabilities.
