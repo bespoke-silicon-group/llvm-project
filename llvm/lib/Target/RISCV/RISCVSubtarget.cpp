@@ -20,6 +20,7 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/Support/TargetRegistry.h"
+#include <algorithm>
 
 using namespace llvm;
 
@@ -99,6 +100,21 @@ bool RISCVSubtarget::enablePhiElimAllCriticalEdgeSplitting(
   // edges. Smaller branch-dense loops are sensitive to the extra blocks, so
   // they use only the repeated-incoming edge policy.
   return getCPU() == "hb-rv32" && MF.size() > 64;
+}
+
+bool RISCVSubtarget::enablePostRAScheduler(const MachineFunction &MF) const {
+  if (getCPU() != "hb-rv32")
+    return TargetSubtargetInfo::enablePostRAScheduler(MF);
+  return MF.size() > 64;
+}
+
+unsigned RISCVSubtarget::adjustTailDuplicationSizeForBlockPlacement(
+    const MachineFunction &MF, unsigned TailDupSize) const {
+  // Pair the post-RA scheduling of large HammerBlade CFGs with enough tail
+  // duplication to retain short fallthrough paths after PHI edge splitting.
+  return getCPU() == "hb-rv32" && MF.size() > 64
+             ? std::max(8u, TailDupSize)
+             : TailDupSize;
 }
 
 /// Target specific adjustments to scheduler dependencies

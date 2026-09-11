@@ -3083,6 +3083,11 @@ bool MachineBlockPlacement::runOnMachineFunction(MachineFunction &MF) {
         TailDupPlacementAggressiveThreshold.getNumOccurrences() != 0)
       TailDupSize = TailDupPlacementAggressiveThreshold;
   }
+  if (TailDupPlacementThreshold.getNumOccurrences() == 0 &&
+      TailDupPlacementAggressiveThreshold.getNumOccurrences() == 0)
+    TailDupSize = MF.getSubtarget()
+                      .adjustTailDuplicationSizeForBlockPlacement(MF,
+                                                                  TailDupSize);
 
   if (allowTailDupPlacement()) {
     MPDT = &getAnalysis<MachinePostDominatorTree>();

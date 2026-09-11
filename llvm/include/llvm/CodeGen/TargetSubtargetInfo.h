@@ -222,6 +222,19 @@ public:
   /// which is the preferred way to influence this.
   virtual bool enablePostRAScheduler() const;
 
+  /// Function-specific post-RA scheduler policy. The default preserves the
+  /// subtarget-wide policy above.
+  virtual bool enablePostRAScheduler(const MachineFunction &MF) const {
+    return enablePostRAScheduler();
+  }
+
+  /// Adjust the tail-duplication size used by machine block placement when no
+  /// command-line threshold was supplied.
+  virtual unsigned adjustTailDuplicationSizeForBlockPlacement(
+      const MachineFunction &MF, unsigned TailDupSize) const {
+    return TailDupSize;
+  }
+
   /// True if the subtarget should run a machine scheduler after register
   /// allocation.
   virtual bool enablePostRAMachineScheduler() const;

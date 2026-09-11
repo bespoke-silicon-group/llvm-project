@@ -105,7 +105,7 @@ namespace {
 
   private:
     bool enablePostRAScheduler(
-        const TargetSubtargetInfo &ST, CodeGenOpt::Level OptLevel,
+        const MachineFunction &MF, CodeGenOpt::Level OptLevel,
         TargetSubtargetInfo::AntiDepBreakMode &Mode,
         TargetSubtargetInfo::RegClassVector &CriticalPathRCs) const;
   };
@@ -264,10 +264,11 @@ LLVM_DUMP_METHOD void SchedulePostRATDList::dumpSchedule() const {
 #endif
 
 bool PostRAScheduler::enablePostRAScheduler(
-    const TargetSubtargetInfo &ST,
+    const MachineFunction &MF,
     CodeGenOpt::Level OptLevel,
     TargetSubtargetInfo::AntiDepBreakMode &Mode,
     TargetSubtargetInfo::RegClassVector &CriticalPathRCs) const {
+  const TargetSubtargetInfo &ST = MF.getSubtarget();
   Mode = ST.getAntiDepBreakMode();
   ST.getCriticalPathRCs(CriticalPathRCs);
 
@@ -275,7 +276,7 @@ bool PostRAScheduler::enablePostRAScheduler(
   if (EnablePostRAScheduler.getPosition() > 0)
     return EnablePostRAScheduler;
 
-  return ST.enablePostRAScheduler() &&
+  return ST.enablePostRAScheduler(MF) &&
          OptLevel >= ST.getOptLevelToEnablePostRAScheduler();
 }
 
@@ -296,7 +297,7 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
 
   // Check that post-RA scheduling is enabled for this target.
   // This may upgrade the AntiDepMode.
-  if (!enablePostRAScheduler(Fn.getSubtarget(), PassConfig->getOptLevel(),
+  if (!enablePostRAScheduler(Fn, PassConfig->getOptLevel(),
                              AntiDepMode, CriticalPathRCs))
     return false;
 
