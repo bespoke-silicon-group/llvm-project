@@ -154,9 +154,6 @@ bool PHIElimination::runOnMachineFunction(MachineFunction &MF) {
   // This pass takes the function out of SSA form.
   MRI->leaveSSA();
 
-  // Count incoming PHI uses before considering target-specific splitting.
-  analyzePHINodes(MF);
-
   // Split critical edges to help the coalescer.
   if (!DisableEdgeSplitting && (LV || LIS)) {
     MachineLoopInfo *MLI = getAnalysisIfAvailable<MachineLoopInfo>();
@@ -164,9 +161,7 @@ bool PHIElimination::runOnMachineFunction(MachineFunction &MF) {
       Changed |= SplitPHIEdges(MF, MBB, MLI);
   }
 
-  // Splitting rewrites PHI predecessor operands, so refresh the counts used
-  // while lowering the PHIs.
-  VRegPHIUseCount.clear();
+  // Populate VRegPHIUseCount
   analyzePHINodes(MF);
 
   // Eliminate PHI instructions by inserting copies into predecessor blocks.
@@ -572,6 +567,9 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
 
   const MachineLoop *CurLoop = MLI ? MLI->getLoopFor(&MBB) : nullptr;
   bool IsLoopHeader = CurLoop && &MBB == CurLoop->getHeader();
+  const bool SplitAll =
+      SplitAllCriticalEdges ||
+      MF.getSubtarget().enablePhiElimAllCriticalEdgeSplitting(MF);
 
   bool Changed = false;
   for (MachineBasicBlock::iterator BBI = MBB.begin(), BBE = MBB.end();
@@ -579,19 +577,29 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
     for (unsigned i = 1, e = BBI->getNumOperands(); i != e; i += 2) {
       Register Reg = BBI->getOperand(i).getReg();
       MachineBasicBlock *PreMBB = BBI->getOperand(i+1).getMBB();
-      const bool SplitMultipleIncoming =
-          MF.getSubtarget().enablePhiElimMultipleIncomingEdgeSplitting() &&
-          VRegPHIUseCount[BBVRegPair(PreMBB->getNumber(), Reg)] > 1;
+      unsigned MatchingIncoming = 0;
+      if (MF.getSubtarget().enablePhiElimMultipleIncomingEdgeSplitting()) {
+        for (const MachineInstr &PHI : MBB) {
+          if (!PHI.isPHI())
+            break;
+          for (unsigned Op = 1, End = PHI.getNumOperands(); Op != End;
+               Op += 2)
+            if (PHI.getOperand(Op).getReg() == Reg &&
+                PHI.getOperand(Op + 1).getMBB() == PreMBB)
+              ++MatchingIncoming;
+        }
+      }
+      const bool SplitMultipleIncoming = MatchingIncoming > 1;
       // Is there a critical edge from PreMBB to MBB?
       if (PreMBB->succ_size() == 1)
         continue;
 
       // Avoid splitting backedges of loops. It would introduce small
       // out-of-line blocks into the loop which is very bad for code placement.
-      if (PreMBB == &MBB && !SplitAllCriticalEdges)
+      if (PreMBB == &MBB && !SplitAll)
         continue;
       const MachineLoop *PreLoop = MLI ? MLI->getLoopFor(PreMBB) : nullptr;
-      if (IsLoopHeader && PreLoop == CurLoop && !SplitAllCriticalEdges)
+      if (IsLoopHeader && PreLoop == CurLoop && !SplitAll)
         continue;
 
       // LV doesn't consider a phi use live-out, so isLiveOut only returns true
@@ -635,7 +643,7 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
         // Split unless this edge is entering CurLoop from an outer loop.
         ShouldSplit = PreLoop && !PreLoop->contains(CurLoop);
       }
-      if (!ShouldSplit && !SplitMultipleIncoming && !SplitAllCriticalEdges)
+      if (!ShouldSplit && !SplitMultipleIncoming && !SplitAll)
         continue;
       if (!PreMBB->SplitCriticalEdge(&MBB, *this)) {
         LLVM_DEBUG(dbgs() << "Failed to split critical edge.\n");

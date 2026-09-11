@@ -208,6 +208,14 @@ public:
     return false;
   }
 
+  /// True if PHI elimination should split every critical edge in this
+  /// function. Targets may use this when large control-flow graphs benefit
+  /// from keeping PHI copies off unrelated successor paths.
+  virtual bool enablePhiElimAllCriticalEdgeSplitting(
+      const MachineFunction &MF) const {
+    return false;
+  }
+
   /// True if the subtarget should run a scheduler after register allocation.
   ///
   /// By default this queries the PostRAScheduling bit in the scheduling model

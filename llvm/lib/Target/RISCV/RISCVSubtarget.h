@@ -89,6 +89,8 @@ public:
   bool enablePhiElimMultipleIncomingEdgeSplitting() const override {
     return getCPU() == "hb-rv32";
   }
+  bool enablePhiElimAllCriticalEdgeSplitting(
+      const MachineFunction &MF) const override;
   bool useAA() const override { return getCPU() == "hb-rv32"; }
   bool enableMachineBlockPlacement(const MachineFunction &MF) const override;
   void adjustSchedDependency (SUnit *Def, SUnit *Use, SDep &Dep

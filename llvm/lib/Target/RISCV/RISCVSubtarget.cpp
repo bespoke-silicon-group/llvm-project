@@ -93,6 +93,14 @@ bool RISCVSubtarget::enableMachineBlockPlacement(
          MF.getInstructionCount() > 20 * MF.size();
 }
 
+bool RISCVSubtarget::enablePhiElimAllCriticalEdgeSplitting(
+    const MachineFunction &MF) const {
+  // Large HammerBlade CFGs benefit from keeping PHI copies on their actual
+  // edges. Smaller branch-dense loops are sensitive to the extra blocks, so
+  // they use only the repeated-incoming edge policy.
+  return getCPU() == "hb-rv32" && MF.size() > 64;
+}
+
 /// Target specific adjustments to scheduler dependencies
 void RISCVSubtarget::adjustSchedDependency (SUnit *Def, SUnit *Use,
                                             SDep &Dep) const {
