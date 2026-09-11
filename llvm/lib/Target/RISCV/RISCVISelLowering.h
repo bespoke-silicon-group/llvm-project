@@ -75,6 +75,9 @@ public:
   bool isZExtFree(SDValue Val, EVT VT2) const override;
   bool isSExtCheaperThanZExt(EVT SrcVT, EVT DstVT) const override;
 
+  bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                  EVT VT) const override;
+
   bool hasBitPreservingFPLogic(EVT VT) const override;
 
   // Provide custom lowering hooks for some operations.

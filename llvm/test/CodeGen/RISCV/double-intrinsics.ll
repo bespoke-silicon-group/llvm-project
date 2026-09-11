@@ -354,8 +354,7 @@ define double @fmuladd_f64(double %a, double %b, double %c) nounwind {
 ; RV32IFD-NEXT:    sw a0, 8(sp)
 ; RV32IFD-NEXT:    sw a1, 12(sp)
 ; RV32IFD-NEXT:    fld ft2, 8(sp)
-; RV32IFD-NEXT:    fmul.d ft1, ft2, ft1
-; RV32IFD-NEXT:    fadd.d ft0, ft1, ft0
+; RV32IFD-NEXT:    fmadd.d ft0, ft2, ft1, ft0
 ; RV32IFD-NEXT:    fsd ft0, 8(sp)
 ; RV32IFD-NEXT:    lw a0, 8(sp)
 ; RV32IFD-NEXT:    lw a1, 12(sp)
@@ -367,8 +366,7 @@ define double @fmuladd_f64(double %a, double %b, double %c) nounwind {
 ; RV64IFD-NEXT:    fmv.d.x ft0, a2
 ; RV64IFD-NEXT:    fmv.d.x ft1, a1
 ; RV64IFD-NEXT:    fmv.d.x ft2, a0
-; RV64IFD-NEXT:    fmul.d ft1, ft2, ft1
-; RV64IFD-NEXT:    fadd.d ft0, ft1, ft0
+; RV64IFD-NEXT:    fmadd.d ft0, ft2, ft1, ft0
 ; RV64IFD-NEXT:    fmv.x.d a0, ft0
 ; RV64IFD-NEXT:    ret
   %1 = call double @llvm.fmuladd.f64(double %a, double %b, double %c)

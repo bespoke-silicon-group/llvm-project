@@ -251,6 +251,14 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setMinimumJumpTableEntries(INT_MAX);
 }
 
+bool RISCVTargetLowering::isFMAFasterThanFMulAndFAdd(
+    const MachineFunction &, EVT VT) const {
+  // Standard F and D include fused multiply-add. A legal scalar FMA replaces
+  // two dependent arithmetic instructions with one.
+  return (VT == MVT::f32 && Subtarget.hasStdExtF()) ||
+         (VT == MVT::f64 && Subtarget.hasStdExtD());
+}
+
 EVT RISCVTargetLowering::getSetCCResultType(const DataLayout &DL, LLVMContext &,
                                             EVT VT) const {
   if (!VT.isVector())
