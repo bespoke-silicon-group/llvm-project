@@ -27,6 +27,7 @@
 #include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
 #include <set>
@@ -46,6 +47,7 @@ struct RISCVMergeBaseOffsetOpt : public MachineFunctionPass {
   void foldOffset(MachineInstr &HiLUI, MachineInstr &LoADDI, MachineInstr &Tail,
                   int64_t Offset);
   bool matchLargeOffset(MachineInstr &TailAdd, Register GSReg, int64_t &Offset);
+  bool exposePostIncrementStores(MachineFunction &Fn);
   RISCVMergeBaseOffsetOpt() : MachineFunctionPass(ID) {}
 
   MachineFunctionProperties getRequiredProperties() const override {
@@ -255,6 +257,65 @@ bool RISCVMergeBaseOffsetOpt::detectAndFoldOffset(MachineInstr &HiLUI,
   return false;
 }
 
+// Canonical loop lowering leaves stores before their induction update:
+//
+//   FSW  %value, %base, 0
+//   %next = ADDI %base, 4
+//
+// Rebase the store on %next and compensate its immediate.  Moving the ADDI
+// before the store preserves SSA while exposing an independent instruction to
+// the scheduler between FP arithmetic and its store.  The transformation is
+// valid for any in-range immediate but is enabled only for HammerBlade, whose
+// scalar in-order core benefits from filling that producer/store latency.
+bool RISCVMergeBaseOffsetOpt::exposePostIncrementStores(MachineFunction &Fn) {
+  if (Fn.getSubtarget().getCPU() != "hb-rv32")
+    return false;
+
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : Fn) {
+    for (MachineInstr &Store : llvm::make_early_inc_range(MBB)) {
+      switch (Store.getOpcode()) {
+      default:
+        continue;
+      case RISCV::FSW:
+        break;
+      }
+
+      if (!Store.getOperand(1).isReg() ||
+          !Store.getOperand(1).getReg().isVirtual() ||
+          !Store.getOperand(2).isImm())
+        continue;
+
+      Register Base = Store.getOperand(1).getReg();
+      auto Candidate = std::next(Store.getIterator());
+      for (; Candidate != MBB.end(); ++Candidate) {
+        if (Candidate->isTerminator())
+          break;
+        if (Candidate->getOpcode() != RISCV::ADDI ||
+            !Candidate->getOperand(0).isReg() ||
+            !Candidate->getOperand(0).getReg().isVirtual() ||
+            !Candidate->getOperand(1).isReg() ||
+            Candidate->getOperand(1).getReg() != Base ||
+            !Candidate->getOperand(2).isImm())
+          continue;
+
+        int64_t Offset = Store.getOperand(2).getImm();
+        int64_t Step = Candidate->getOperand(2).getImm();
+        if ((Step != 4 && Step != -4) || !isInt<12>(Offset - Step))
+          break;
+
+        Store.getOperand(1).setReg(Candidate->getOperand(0).getReg());
+        Store.getOperand(1).setIsKill(false);
+        Store.getOperand(2).setImm(Offset - Step);
+        MBB.splice(Store.getIterator(), &MBB, Candidate->getIterator());
+        Changed = true;
+        break;
+      }
+    }
+  }
+  return Changed;
+}
+
 bool RISCVMergeBaseOffsetOpt::runOnMachineFunction(MachineFunction &Fn) {
   if (skipFunction(Fn.getFunction()))
     return false;
@@ -276,7 +337,7 @@ bool RISCVMergeBaseOffsetOpt::runOnMachineFunction(MachineFunction &Fn) {
   // Delete dead instructions.
   for (auto *MI : DeadInstrs)
     MI->eraseFromParent();
-  return true;
+  return exposePostIncrementStores(Fn) || !DeadInstrs.empty();
 }
 
 /// Returns an instance of the Merge Base Offset Optimization pass.
