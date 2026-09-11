@@ -136,6 +136,14 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UREM, XLenVT, Expand);
   }
 
+  // HammerBlade implements the low-word multiply and integer divide/remainder
+  // operations from M, but deliberately traps MULH/MULHSU/MULHU.  Keep MUL,
+  // DIV, and REM legal while expanding only the unsupported high-word forms.
+  if (Subtarget.getCPU() == "hb-rv32") {
+    setOperationAction(ISD::MULHS, XLenVT, Expand);
+    setOperationAction(ISD::MULHU, XLenVT, Expand);
+  }
+
   if (Subtarget.is64Bit() && Subtarget.hasStdExtM()) {
     setOperationAction(ISD::MUL, MVT::i32, Custom);
     setOperationAction(ISD::SDIV, MVT::i32, Custom);
