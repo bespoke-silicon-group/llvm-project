@@ -40,6 +40,9 @@ FunctionPass *createRISCVISelDag(RISCVTargetMachine &TM);
 FunctionPass *createRISCVMergeBaseOffsetOptPass();
 void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
 
+FunctionPass *createRISCVRemoveRedundantBooleanPass();
+void initializeRISCVRemoveRedundantBooleanPass(PassRegistry &);
+
 FunctionPass *createRISCVExpandPseudoPass();
 void initializeRISCVExpandPseudoPass(PassRegistry &);
 
