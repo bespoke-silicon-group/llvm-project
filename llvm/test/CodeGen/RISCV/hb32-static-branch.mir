@@ -1,0 +1,161 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 \
+# RUN:   -run-pass=riscv-hb-static-branch -verify-machineinstrs -o - %s \
+# RUN:   | FileCheck %s
+
+--- |
+  define void @joined_seqz() {
+    ret void
+  }
+  define void @clobbered_seqz_source() {
+    ret void
+  }
+  define void @rare_out_of_line() {
+    ret void
+  }
+  define void @rare_backward_skip() {
+    ret void
+  }
+...
+---
+name:            joined_seqz
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.2(0x40000000), %bb.1(0x40000000)
+    liveins: $x10, $x11
+
+    BNE $x10, $x0, %bb.2
+
+  bb.1:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+
+    $x12 = SLTIU $x11, 1
+    PseudoBR %bb.3
+
+  bb.2:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+
+    $x12 = SLTIU $x11, 1
+    PseudoBR %bb.3
+
+  bb.3:
+    successors: %bb.5(0x30000000), %bb.4(0x50000000)
+    liveins: $x11, $x12
+
+    ; CHECK-LABEL: name: joined_seqz
+    ; CHECK-NOT: SLTIU
+    ; CHECK: bb.3:
+    ; CHECK: BNE $x11, $x0, %bb.5
+    BEQ $x12, $x0, %bb.5
+
+  bb.4:
+    liveins: $x11
+
+    PseudoRET
+
+  bb.5:
+    liveins: $x11
+
+    PseudoRET
+...
+---
+name:            clobbered_seqz_source
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.2(0x30000000), %bb.1(0x50000000)
+    liveins: $x11
+
+    ; Replacing the branch input with x11 would be wrong because its value has
+    ; changed since SLTIU computed x12.
+    ; CHECK-LABEL: name: clobbered_seqz_source
+    ; CHECK: $x12 = SLTIU $x11, 1
+    ; CHECK-NEXT: $x11 = ADDI $x11, 1
+    ; CHECK-NEXT: BEQ $x12, $x0, %bb.2
+    $x12 = SLTIU $x11, 1
+    $x11 = ADDI $x11, 1
+    BEQ $x12, $x0, %bb.2
+
+  bb.1:
+    PseudoRET
+
+  bb.2:
+    PseudoRET
+...
+---
+name:            rare_out_of_line
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+
+    PseudoBR %bb.1
+
+  bb.1:
+    successors: %bb.0(0x04000000), %bb.2(0x7c000000)
+    liveins: $x10, $x11
+
+    ; CHECK-LABEL: name: rare_out_of_line
+    ; CHECK: bb.1:
+    ; CHECK: successors: %bb.4(0x04000000), %bb.2(0x7c000000)
+    ; CHECK: BEQ $x10, $x11, %bb.4
+    BEQ $x10, $x11, %bb.0
+
+  bb.2:
+    successors: %bb.3(0x80000000)
+    liveins: $x10
+
+    $x10 = ADDI $x10, 1
+    PseudoBR %bb.3
+
+  bb.3:
+    liveins: $x10
+
+    PseudoRET
+
+    ; CHECK: bb.4:
+    ; CHECK: successors: %bb.0(0x80000000)
+    ; CHECK: PseudoBR %bb.0
+...
+---
+name:            rare_backward_skip
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+
+    PseudoBR %bb.1
+
+  bb.1:
+    successors: %bb.2(0x80000000)
+    liveins: $x10, $x11
+
+    PseudoBR %bb.2
+
+  bb.2:
+    successors: %bb.1(0x30000000), %bb.3(0x50000000)
+    liveins: $x10, $x11
+
+    ; CHECK-LABEL: name: rare_backward_skip
+    ; CHECK: bb.2:
+    ; CHECK: successors: %bb.4(0x30000000), %bb.3(0x50000000)
+    ; CHECK: BEQ $x10, $x11, %bb.4
+    BEQ $x10, $x11, %bb.1
+
+  bb.3:
+    successors: %bb.1(0x80000000)
+    liveins: $x10
+
+    ; CHECK: bb.3:
+    ; CHECK: $x10 = ADDI $x10, 1
+    ; CHECK-NEXT: PseudoBR %bb.1
+    ; CHECK: bb.4:
+    ; CHECK: successors: %bb.1(0x80000000)
+    ; CHECK: PseudoBR %bb.1
+    $x10 = ADDI $x10, 1
+    PseudoBR %bb.1
+...

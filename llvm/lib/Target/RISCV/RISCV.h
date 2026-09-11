@@ -43,6 +43,9 @@ void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
 FunctionPass *createRISCVRemoveRedundantBooleanPass();
 void initializeRISCVRemoveRedundantBooleanPass(PassRegistry &);
 
+FunctionPass *createRISCVHBStaticBranchPass();
+void initializeRISCVHBStaticBranchPass(PassRegistry &);
+
 FunctionPass *createRISCVExpandPseudoPass();
 void initializeRISCVExpandPseudoPass(PassRegistry &);
 
