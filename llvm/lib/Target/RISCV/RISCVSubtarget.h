@@ -86,6 +86,9 @@ public:
   bool enableJoinGlobalCopies() const override {
     return getCPU() != "hb-rv32";
   }
+  bool enablePhiElimMultipleIncomingEdgeSplitting() const override {
+    return getCPU() == "hb-rv32";
+  }
   bool useAA() const override { return getCPU() == "hb-rv32"; }
   bool enableMachineBlockPlacement(const MachineFunction &MF) const override;
   void adjustSchedDependency (SUnit *Def, SUnit *Use, SDep &Dep

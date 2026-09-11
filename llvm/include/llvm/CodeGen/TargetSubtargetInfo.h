@@ -201,6 +201,13 @@ public:
   /// can be overridden.
   virtual bool enableJoinGlobalCopies() const;
 
+  /// True if PHI elimination should split a critical edge when the edge
+  /// carries the same incoming register to more than one PHI. This avoids
+  /// speculatively executing several copies on the edge's other successors.
+  virtual bool enablePhiElimMultipleIncomingEdgeSplitting() const {
+    return false;
+  }
+
   /// True if the subtarget should run a scheduler after register allocation.
   ///
   /// By default this queries the PostRAScheduling bit in the scheduling model

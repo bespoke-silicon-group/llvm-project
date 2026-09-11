@@ -154,6 +154,9 @@ bool PHIElimination::runOnMachineFunction(MachineFunction &MF) {
   // This pass takes the function out of SSA form.
   MRI->leaveSSA();
 
+  // Count incoming PHI uses before considering target-specific splitting.
+  analyzePHINodes(MF);
+
   // Split critical edges to help the coalescer.
   if (!DisableEdgeSplitting && (LV || LIS)) {
     MachineLoopInfo *MLI = getAnalysisIfAvailable<MachineLoopInfo>();
@@ -161,7 +164,9 @@ bool PHIElimination::runOnMachineFunction(MachineFunction &MF) {
       Changed |= SplitPHIEdges(MF, MBB, MLI);
   }
 
-  // Populate VRegPHIUseCount
+  // Splitting rewrites PHI predecessor operands, so refresh the counts used
+  // while lowering the PHIs.
+  VRegPHIUseCount.clear();
   analyzePHINodes(MF);
 
   // Eliminate PHI instructions by inserting copies into predecessor blocks.
@@ -574,6 +579,9 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
     for (unsigned i = 1, e = BBI->getNumOperands(); i != e; i += 2) {
       Register Reg = BBI->getOperand(i).getReg();
       MachineBasicBlock *PreMBB = BBI->getOperand(i+1).getMBB();
+      const bool SplitMultipleIncoming =
+          MF.getSubtarget().enablePhiElimMultipleIncomingEdgeSplitting() &&
+          VRegPHIUseCount[BBVRegPair(PreMBB->getNumber(), Reg)] > 1;
       // Is there a critical edge from PreMBB to MBB?
       if (PreMBB->succ_size() == 1)
         continue;
@@ -593,7 +601,8 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
       //
       // If the copy would be a kill, there is no need to split the edge.
       bool ShouldSplit = isLiveOutPastPHIs(Reg, PreMBB);
-      if (!ShouldSplit && !NoPhiElimLiveOutEarlyExit)
+      if (!ShouldSplit && !SplitMultipleIncoming &&
+          !NoPhiElimLiveOutEarlyExit)
         continue;
       if (ShouldSplit) {
         LLVM_DEBUG(dbgs() << printReg(Reg) << " live-out before critical edge "
@@ -626,7 +635,7 @@ bool PHIElimination::SplitPHIEdges(MachineFunction &MF,
         // Split unless this edge is entering CurLoop from an outer loop.
         ShouldSplit = PreLoop && !PreLoop->contains(CurLoop);
       }
-      if (!ShouldSplit && !SplitAllCriticalEdges)
+      if (!ShouldSplit && !SplitMultipleIncoming && !SplitAllCriticalEdges)
         continue;
       if (!PreMBB->SplitCriticalEdge(&MBB, *this)) {
         LLVM_DEBUG(dbgs() << "Failed to split critical edge.\n");
