@@ -125,6 +125,7 @@ public:
       MachineSchedContext *C) const override;
 
   void addIRPasses() override;
+  void addPostRegAlloc() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
   bool addLegalizeMachineIR() override;
@@ -153,6 +154,18 @@ ScheduleDAGInstrs *RISCVPassConfig::createMachineScheduler(
 void RISCVPassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
+}
+
+void RISCVPassConfig::addPostRegAlloc() {
+  // HammerBlade Vanilla uses a static backward-taken/forward-not-taken branch
+  // predictor. Generic machine block placement can rotate natural loops so
+  // that their common conditional paths become backward not-taken branches,
+  // producing a misprediction on nearly every iteration. Preserve the
+  // SelectionDAG layout for this CPU until block placement models static
+  // directional prediction costs.
+  if (getRISCVTargetMachine().getTargetCPU() == "hb-rv32")
+    disablePass(&MachineBlockPlacementID);
+  TargetPassConfig::addPostRegAlloc();
 }
 
 bool RISCVPassConfig::addInstSelector() {
