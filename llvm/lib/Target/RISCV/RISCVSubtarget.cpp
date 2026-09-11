@@ -230,9 +230,10 @@ unsigned RISCVSubtarget::getMinimumJumpTableEntries() const {
 
 void RISCVSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
                                          const SchedRegion &Region) const {
-  // Do bidirectional scheduling since it provides a more balanced scheduling
-  // leading to better performance. This will increase compile time.
-  Policy.OnlyTopDown = false;
+  // Vanilla is a scalar, in-order core. Top-down scheduling exposes producer
+  // latency without bunching loads immediately before their users. Other
+  // RISC-V processors retain the generic bidirectional policy.
+  Policy.OnlyTopDown = getCPU() == "hb-rv32";
   Policy.OnlyBottomUp = false;
 
   // Disabling the latency heuristic can reduce the number of spills/reloads but
