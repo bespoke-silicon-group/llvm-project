@@ -3,13 +3,14 @@
 ;
 ; SelectionDAG promotes i1 PHIs to GPRs and can leave an ANDI 1 before a
 ; branch even when every incoming definition is a zero-or-one comparison.
-; Keep the input i1 mask, but omit the redundant mask at the merge.
+; Keep the input i1 mask, but branch on the underlying value at the merge
+; instead of materializing and testing seqz results.
 
 define i32 @bool_phi(i32 %a, i32 %b, i1 %pick, i32* %sink) nounwind {
 ; CHECK-LABEL: bool_phi:
 ; CHECK:         andi a2, a2, 1
 ; CHECK:       .LBB0_3:
-; CHECK-NEXT:    beqz a2, .LBB0_5
+; CHECK-NEXT:    bnez a0, .LBB0_5
 entry:
   %az = icmp eq i32 %a, 0
   %bz = icmp eq i32 %b, 0
