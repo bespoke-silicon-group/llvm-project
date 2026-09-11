@@ -718,6 +718,26 @@ bool BranchProbabilityInfo::calcZeroHeuristics(const BasicBlock *BB,
     return true;
   }
 
+  // Pointer-like worklists on HammerBlade are commonly represented as i32
+  // PHIs with zero sentinels.  Their empty entries are not well modeled by the
+  // generic "zero is unlikely" rule; a slight zero bias also gives the static
+  // backward-taken predictor a stable layout choice.  Loop exits have already
+  // been handled by the stronger loop heuristic.
+  if (CV->isZero() && CI->isEquality() &&
+      !CI->getOperand(0)->getType()->isIntegerTy(1) &&
+      isa<PHINode>(CI->getOperand(0)) && BB->getParent()->size() <= 64) {
+    Attribute CPU = BB->getParent()->getFnAttribute("target-cpu");
+    if (CPU.isStringAttribute() && CPU.getValueAsString() == "hb-rv32") {
+      bool IsProb = CI->getPredicate() == CmpInst::ICMP_EQ;
+      unsigned TakenIdx = IsProb ? 0 : 1;
+      unsigned NonTakenIdx = IsProb ? 1 : 0;
+      BranchProbability TakenProb(3, 5);
+      setEdgeProbability(BB, TakenIdx, TakenProb);
+      setEdgeProbability(BB, NonTakenIdx, TakenProb.getCompl());
+      return true;
+    }
+  }
+
   // If the LHS is the result of AND'ing a value with a single bit bitmask,
   // we don't have information about probabilities.
   if (Instruction *LHS = dyn_cast<Instruction>(CI->getOperand(0)))
