@@ -587,6 +587,15 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
   Type *Ty = LI.getType();
   const DataLayout &DL = IC.getDataLayout();
 
+  // HammerBlade has separate integer and floating-point register files, and
+  // its scalar FP load/store instructions can keep FP copies out of the much
+  // more heavily used integer register file. Preserve the source FP type for
+  // this target instead of canonicalizing a pure load/store copy to integer.
+  Attribute CPU = LI.getFunction()->getFnAttribute("target-cpu");
+  bool PreserveHammerBladeFP =
+      CPU.isStringAttribute() && CPU.getValueAsString() == "hb-rv32" &&
+      Ty->isFloatingPointTy();
+
   // Try to canonicalize loads which are only ever stored to operate over
   // integers instead of any other type. We only do this when the loaded type
   // is sized and has a size exactly the same as its store size and the store
@@ -594,7 +603,7 @@ static Instruction *combineLoadToOperationType(InstCombiner &IC, LoadInst &LI) {
   // Do not perform canonicalization if minmax pattern is found (to avoid
   // infinite loop).
   Type *Dummy;
-  if (!Ty->isIntegerTy() && Ty->isSized() &&
+  if (!PreserveHammerBladeFP && !Ty->isIntegerTy() && Ty->isSized() &&
       !(Ty->isVectorTy() && Ty->getVectorIsScalable()) &&
       DL.isLegalInteger(DL.getTypeStoreSizeInBits(Ty)) &&
       DL.typeSizeEqualsStoreSize(Ty) &&

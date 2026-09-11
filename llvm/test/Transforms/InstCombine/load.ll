@@ -237,6 +237,21 @@ entry:
   ret void
 }
 
+; HammerBlade's separate FP register file makes the original FP copy type
+; preferable to integer canonicalization.
+define void @test16-hb(float addrspace(1)* %x, float* %a) #1 {
+; CHECK-LABEL: @test16-hb(
+; CHECK-NEXT:    [[V:%.*]] = load float, float addrspace(1)* [[X:%.*]], align 4
+; CHECK-NEXT:    store float [[V]], float* [[A:%.*]], align 4
+; CHECK-NEXT:    ret void
+;
+  %v = load float, float addrspace(1)* %x, align 4
+  store float %v, float* %a, align 4
+  ret void
+}
+
+attributes #1 = { "target-cpu"="hb-rv32" }
+
 define void @test16-vect(i8* %x, i8* %a, i8* %b, i8* %c) {
 ; CHECK-LABEL: @test16-vect(
 ; CHECK-NEXT:  entry:
