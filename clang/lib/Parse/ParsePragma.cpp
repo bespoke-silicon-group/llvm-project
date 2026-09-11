@@ -365,6 +365,10 @@ void Parser::initializePragmaHandlers() {
   UnrollHintHandler = std::make_unique<PragmaUnrollHintHandler>("unroll");
   PP.AddPragmaHandler(UnrollHintHandler.get());
 
+  GCCUnrollHintHandler =
+      std::make_unique<PragmaUnrollHintHandler>("unroll");
+  PP.AddPragmaHandler("GCC", GCCUnrollHintHandler.get());
+
   NoUnrollHintHandler = std::make_unique<PragmaUnrollHintHandler>("nounroll");
   PP.AddPragmaHandler(NoUnrollHintHandler.get());
 
@@ -472,6 +476,9 @@ void Parser::resetPragmaHandlers() {
 
   PP.RemovePragmaHandler(UnrollHintHandler.get());
   UnrollHintHandler.reset();
+
+  PP.RemovePragmaHandler("GCC", GCCUnrollHintHandler.get());
+  GCCUnrollHintHandler.reset();
 
   PP.RemovePragmaHandler(NoUnrollHintHandler.get());
   NoUnrollHintHandler.reset();
