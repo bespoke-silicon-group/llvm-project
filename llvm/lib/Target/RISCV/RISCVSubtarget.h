@@ -164,6 +164,10 @@ public:
   /// initializeProperties().
   RISCVProcFamilyEnum getProcFamily() const { return RISCVProcFamily; }
 
+  // Vanilla implements low-word MUL and integer divide/remainder, but the
+  // three high-word multiply encodings deliberately trap in the RTL.
+  bool hasHighWordMultiply() const { return getCPU() != "hb-rv32"; }
+
   RISCVVRGatherCostModelEnum getVRGatherCostModel() const { return RISCVVRGatherCostModel; }
 
 #define GET_SUBTARGETINFO_MACRO(ATTRIBUTE, DEFAULT, GETTER) \

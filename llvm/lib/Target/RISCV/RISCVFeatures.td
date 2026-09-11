@@ -213,6 +213,7 @@ def FeatureStdExtM
 def HasStdExtM : Predicate<"Subtarget->hasStdExtM()">,
                  AssemblerPredicate<(all_of FeatureStdExtM),
                      "'M' (Integer Multiplication and Division)">;
+def HasHighWordMultiply : Predicate<"Subtarget->hasHighWordMultiply()">;
 
 // Atomic Extensions
 
@@ -1974,4 +1975,3 @@ def TuneSiFive7 : SubtargetFeature<"sifive7", "RISCVProcFamily", "SiFive7",
 
 def TuneVentanaVeyron : SubtargetFeature<"ventana-veyron", "RISCVProcFamily", "VentanaVeyron",
                                          "Ventana Veyron-Series processors">;
-

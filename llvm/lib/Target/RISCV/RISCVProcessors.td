@@ -106,6 +106,20 @@ def GENERIC : RISCVTuneProcessorModel<"generic", NoSchedModel>, GenericTuneInfo;
 def GENERIC_OOO : RISCVTuneProcessorModel<"generic-ooo", GenericOOOModel>,
                   GenericTuneInfo;
 
+def HB32_RV32 : RISCVProcessorModel<"hb-rv32",
+                                    HB32Model,
+                                    [Feature32Bit,
+                                     FeatureStdExtI,
+                                     FeatureStdExtM,
+                                     FeatureStdExtA,
+                                     FeatureStdExtF]>;
+
+// Preserve the established HammerBlade SDK spelling used in common C flags.
+// It is a tune-only alias; code-generation features continue to come from
+// -march or -mcpu=hb-rv32.
+def BSG_VANILLA_2020 : RISCVTuneProcessorModel<"bsg_vanilla_2020", HB32Model>,
+                       GenericTuneInfo;
+
 def MIPS_P8700 : RISCVProcessorModel<"mips-p8700",
                                      MIPSP8700Model,
                                      [Feature64Bit,

@@ -367,6 +367,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MUL, MVT::i64, Custom);
   }
 
+  // HammerBlade implements low-word MUL but deliberately traps MULH,
+  // MULHSU, and MULHU. Keep the useful M-extension operations legal while
+  // expanding only the unsupported high-word forms.
+  if (!Subtarget.hasHighWordMultiply())
+    setOperationAction({ISD::MULHS, ISD::MULHU}, XLenVT, Expand);
+
   if (!Subtarget.hasStdExtM()) {
     setOperationAction({ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM}, XLenVT,
                        Expand);
