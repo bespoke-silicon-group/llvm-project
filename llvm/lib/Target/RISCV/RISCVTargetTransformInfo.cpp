@@ -2769,6 +2769,16 @@ void RISCVTTIImpl::getUnrollingPreferences(
   // TODO: More tuning on benchmarks and metrics with changes as needed
   //       would apply to all settings below to enable performance.
 
+  if (ST->getCPU() == "hb-rv32") {
+    BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);
+    // Vanilla has no hardware loop buffer, and its single-issue pipeline
+    // benefits from amortizing loop control and address generation. Permit
+    // partial unrolling, but use a conservative threshold to limit I-cache
+    // growth and avoid forcing every small loop to unroll.
+    UP.Partial = true;
+    UP.PartialThreshold = 100;
+    return;
+  }
 
   if (ST->enableDefaultUnroll())
     return BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);
