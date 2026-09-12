@@ -3567,6 +3567,9 @@ void MachineBlockPlacementPass::printPipeline(
 
 bool MachineBlockPlacement::run(MachineFunction &MF) {
 
+  if (!MF.getSubtarget().enableMachineBlockPlacement(MF))
+    return false;
+
   // Check for single-block functions and skip them.
   if (std::next(MF.begin()) == MF.end())
     return false;

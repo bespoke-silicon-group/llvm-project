@@ -61,6 +61,10 @@ static cl::opt<unsigned> HBRemoteLoadLatency(
     "riscv-hb-remote-load-latency", cl::Hidden, cl::init(20),
     cl::desc("HammerBlade address-space-1 load scheduling latency (0 disables)"));
 
+static cl::opt<bool> HBPreserveBranchDenseLayout(
+    "riscv-hb-preserve-branch-dense-layout", cl::Hidden, cl::init(true),
+    cl::desc("Preserve initial HammerBlade layout for small branch-dense CFGs"));
+
 static cl::opt<unsigned> RISCVMinimumJumpTableEntries(
     "riscv-min-jump-table-entries", cl::Hidden,
     cl::desc("Set minimum number of entries to use a jump table on RISCV"));
@@ -81,6 +85,28 @@ static cl::opt<bool> EnablePExtSIMDCodeGen(
     cl::init(false), cl::Hidden);
 
 void RISCVSubtarget::anchor() {}
+
+bool RISCVSubtarget::enableMachineBlockPlacement(
+    const MachineFunction &MF) const {
+  // Vanilla predicts backward conditional branches taken and forward ones
+  // not taken. Generic fallthrough-chain placement can reverse the common
+  // paths of small branch-dense loops. Preserve their initial layout, but keep
+  // chain formation for large CFGs / long blocks and honor profile and size
+  // guidance. This bounded structural heuristic is not a profitability proof.
+  if (getCPU() != "hb-rv32" || !HBPreserveBranchDenseLayout ||
+      MF.getFunction().hasProfileData() || MF.getFunction().hasOptSize() ||
+      MF.size() > 64 || MF.getInstructionCount() > 20 * MF.size())
+    return true;
+  // The loop-layout heuristic does not model recursive call/return paths.
+  // Preserve generic placement when a direct self-call remains after lowering.
+  for (const MachineBasicBlock &MBB : MF)
+    for (const MachineInstr &MI : MBB)
+      if (MI.isCall())
+        for (const MachineOperand &MO : MI.operands())
+          if (MO.isGlobal() && MO.getGlobal() == &MF.getFunction())
+            return true;
+  return false;
+}
 
 RISCVSubtarget &
 RISCVSubtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,

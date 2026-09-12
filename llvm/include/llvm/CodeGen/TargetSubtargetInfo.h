@@ -201,6 +201,13 @@ public:
   /// TargetLowering preference). It does not yet disable the postRA scheduler.
   virtual bool enableMachineScheduler() const;
 
+  /// Whether generic fallthrough-chain placement is appropriate for this
+  /// function. Targets with static branch prediction may prefer the initial
+  /// layout for selected CFGs. Other targets retain the generic default.
+  virtual bool enableMachineBlockPlacement(const MachineFunction &MF) const {
+    return true;
+  }
+
   /// True if the machine scheduler should disable the TLI preference
   /// for preRA scheduling with the source level scheduler.
   virtual bool enableMachineSchedDefaultSched() const { return true; }

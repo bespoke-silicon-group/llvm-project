@@ -149,6 +149,8 @@ public:
 
   bool enableMachineScheduler() const override { return true; }
 
+  bool enableMachineBlockPlacement(const MachineFunction &MF) const override;
+
   bool enablePostRAScheduler() const override { return UsePostRAScheduler; }
 
   Align getPrefFunctionAlignment() const {
