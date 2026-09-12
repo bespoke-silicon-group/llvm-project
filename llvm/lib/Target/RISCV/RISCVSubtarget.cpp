@@ -17,6 +17,7 @@
 #include "RISCVFrameLowering.h"
 #include "RISCVSelectionDAGInfo.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -55,6 +56,10 @@ static cl::opt<unsigned> RISCVMaxBuildIntsCost(
 
 static cl::opt<bool> UseAA("riscv-use-aa", cl::init(true),
                            cl::desc("Enable the use of AA during codegen."));
+
+static cl::opt<unsigned> HBRemoteLoadLatency(
+    "riscv-hb-remote-load-latency", cl::Hidden, cl::init(20),
+    cl::desc("HammerBlade address-space-1 load scheduling latency (0 disables)"));
 
 static cl::opt<unsigned> RISCVMinimumJumpTableEntries(
     "riscv-min-jump-table-entries", cl::Hidden,
@@ -243,6 +248,43 @@ void RISCVSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
   // Spilling is generally expensive on all RISC-V cores, so always enable
   // register-pressure tracking. This will increase compile time.
   Policy.ShouldTrackPressure = true;
+}
+
+void RISCVSubtarget::adjustSchedDependency(
+    SUnit *Def, int DefOpIdx, SUnit *Use, int UseOpIdx, SDep &Dep,
+    const TargetSchedModel *SchedModel) const {
+  if (getCPU() != "hb-rv32" ||
+      Dep.getKind() != SDep::Data || !Dep.getReg() || !Def->isInstr() ||
+      !Use->isInstr())
+    return;
+
+  const MachineInstr *MI = Def->getInstr();
+  // Address space 1 explicitly marks remote data. Keep local/unannotated
+  // loads and atomic read-modify-write operations on their normal model.
+  // Twenty cycles is a scheduling heuristic inherited from the HB port,
+  // not a fixed network/cache/DRAM latency. Only adjust register data edges.
+  if (HBRemoteLoadLatency && MI->mayLoad() && !MI->mayStore() &&
+      llvm::any_of(MI->memoperands(), [](const MachineMemOperand *MMO) {
+        return MMO->getAddrSpace() == 1;
+      }))
+    Dep.setLatency(std::max(Dep.getLatency(), unsigned(HBRemoteLoadLatency)));
+
+  // Vanilla's FP input stage reads integer rs1 without the integer bypass
+  // network (stall_bypass_fp_rs1). ALU, multiply, local-load, and FP-to-int
+  // results all require four cycles to this consumer, despite different
+  // latencies to integer consumers. Do not assign execution latency to
+  // coalescible COPYs or lower a long-latency divide/remote-load estimate.
+  if (UseOpIdx == 1 && !MI->isPseudo() && !MI->mayStore()) {
+    switch (Use->getInstr()->getOpcode()) {
+    default:
+      break;
+    case RISCV::FMV_W_X:
+    case RISCV::FCVT_S_W:
+    case RISCV::FCVT_S_WU:
+      Dep.setLatency(std::max(Dep.getLatency(), 4u));
+      break;
+    }
+  }
 }
 
 void RISCVSubtarget::overridePostRASchedPolicy(

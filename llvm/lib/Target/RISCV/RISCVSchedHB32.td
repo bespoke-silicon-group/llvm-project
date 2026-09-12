@@ -92,7 +92,6 @@ def : ReadAdvance<ReadCSR, 0>;
 def : ReadAdvance<ReadMemBase, 0>;
 def : ReadAdvance<ReadFMemBase, 0>;
 def : ReadAdvance<ReadStoreData, 0>;
-def : ReadAdvance<ReadFStoreData, 0>;
 def : ReadAdvance<ReadIALU, 0>;
 def : ReadAdvance<ReadShiftImm, 0>;
 def : ReadAdvance<ReadShiftReg, 0>;
@@ -117,6 +116,16 @@ def : ReadAdvance<ReadFCvtI32ToF32, 0>;
 def : ReadAdvance<ReadFMovF32ToI32, 0>;
 def : ReadAdvance<ReadFMovI32ToF32, 0>;
 def : ReadAdvance<ReadFClass32, 0>;
+
+// Integer-to-FP forwarding has a four-cycle minimum across writers with
+// different base latencies; RISCVSubtarget::adjustSchedDependency models it.
+
+// FSW reads the FP register file through the integer pipeline. Arithmetic
+// and local FLW results reach that operand one cycle later than FP consumers.
+def : ReadAdvance<ReadFStoreData, -1,
+                  [WriteFAdd32, WriteFSGNJ32, WriteFMinMax32, WriteFMul32,
+                   WriteFMA32, WriteFCvtI32ToF32, WriteFMovI32ToF32,
+                   WriteFLD32]>;
 
 // Explicitly mark RV64-only and extension-only scheduling classes that cannot
 // execute on this scalar RV32IMAF configuration. This also keeps TableGen from
