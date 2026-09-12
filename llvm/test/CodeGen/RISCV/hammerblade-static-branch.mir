@@ -1,0 +1,148 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -run-pass=riscv-hb-static-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HB
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -enable-riscv-hb-static-branch=false -run-pass=riscv-hb-static-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -run-pass=riscv-hb-static-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+
+--- |
+  define void @rare() { ret void }
+  define void @common() { ret void }
+  define void @not_rare() { ret void }
+  define void @size_opt() optsize { ret void }
+  define void @diamond() { ret void }
+...
+---
+name: rare
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: rare
+  ; HB: bb.1:
+  ; HB: BEQ $x10, $x11, %bb.3
+  ; OFF-LABEL: name: rare
+  ; OFF: bb.1:
+  ; OFF: BEQ $x10, $x11, %bb.0
+  ; OFF-NOT: bb.3:
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.0(0x04000000), %bb.2(0x7c000000)
+    liveins: $x10, $x11
+    BEQ $x10, $x11, %bb.0
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  ; HB: bb.3:
+  ; HB: successors: %bb.0(0x80000000)
+  ; HB: liveins: $x10, $x11
+  ; HB: PseudoBR %bb.0
+...
+---
+name: common
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: common
+  ; HB: bb.1:
+  ; HB: BEQ $x10, $x11, %bb.0
+  ; OFF-LABEL: name: common
+  ; OFF: bb.1:
+  ; OFF: BEQ $x10, $x11, %bb.0
+  ; OFF-NOT: bb.3:
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.0(0x60000000), %bb.2(0x20000000)
+    liveins: $x10, $x11
+    BEQ $x10, $x11, %bb.0
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  ; HB-NOT: bb.3:
+...
+---
+name: not_rare
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: not_rare
+  ; HB: bb.1:
+  ; HB: BEQ $x10, $x11, %bb.0
+  ; OFF-LABEL: name: not_rare
+  ; OFF: bb.1:
+  ; OFF: BEQ $x10, $x11, %bb.0
+  ; OFF-NOT: bb.3:
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.0(0x20000000), %bb.2(0x60000000)
+    liveins: $x10, $x11
+    BEQ $x10, $x11, %bb.0
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  ; HB-NOT: bb.3:
+...
+---
+name: size_opt
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: size_opt
+  ; HB: bb.1:
+  ; HB: BEQ $x10, $x11, %bb.0
+  ; OFF-LABEL: name: size_opt
+  ; OFF: bb.1:
+  ; OFF: BEQ $x10, $x11, %bb.0
+  ; OFF-NOT: bb.3:
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.0(0x04000000), %bb.2(0x7c000000)
+    liveins: $x10, $x11
+    BEQ $x10, $x11, %bb.0
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  ; HB-NOT: bb.3:
+...
+---
+name: diamond
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: diamond
+  ; HB: bb.2:
+  ; HB: BEQ $x10, $x11, %bb.4
+  ; HB: bb.3:
+  ; HB: PseudoBR %bb.1
+  ; HB: bb.4:
+  ; HB: liveins: $x10, $x11
+  ; HB: PseudoBR %bb.1
+  ; OFF-LABEL: name: diamond
+  ; OFF: bb.2:
+  ; OFF: BEQ $x10, $x11, %bb.1
+  ; OFF-NOT: bb.4:
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    liveins: $x10, $x11
+    PseudoBR %bb.2
+  bb.2:
+    successors: %bb.1(0x30000000), %bb.3(0x50000000)
+    liveins: $x10, $x11
+    BEQ $x10, $x11, %bb.1
+  bb.3:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $x11
+    $x10 = ADDI $x10, 1
+    PseudoBR %bb.1
+...

@@ -4228,6 +4228,27 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
                                     SQ.getWithInstruction(&SI)))
     return replaceInstUsesWith(SI, V);
 
+  // Sink a pair of otherwise single-use square roots through a select. This is
+  // value-preserving and lets a later sqrt comparison use the monotonic-input
+  // fold rather than serializing multiple square roots in a min/max chain.
+  Value *SqrtX, *SqrtY;
+  Instruction *TrueSqrt, *FalseSqrt;
+  if (match(TrueVal, m_OneUse(m_Instruction(TrueSqrt))) &&
+      match(FalseVal, m_OneUse(m_Instruction(FalseSqrt))) &&
+      match(TrueSqrt, m_Intrinsic<Intrinsic::sqrt>(m_Value(SqrtX))) &&
+      match(FalseSqrt, m_Intrinsic<Intrinsic::sqrt>(m_Value(SqrtY)))) {
+    Value *InputSelect = Builder.CreateSelect(CondVal, SqrtX, SqrtY,
+                                               SI.getName() + ".sqrt.input");
+    Value *NewSqrt =
+        Builder.CreateUnaryIntrinsic(Intrinsic::sqrt, InputSelect, TrueSqrt);
+    if (auto *NewSqrtInst = dyn_cast<Instruction>(NewSqrt)) {
+      FastMathFlags Flags = TrueSqrt->getFastMathFlags();
+      Flags &= FalseSqrt->getFastMathFlags();
+      NewSqrtInst->setFastMathFlags(Flags);
+    }
+    return replaceInstUsesWith(SI, NewSqrt);
+  }
+
   if (Instruction *I = canonicalizeSelectToShuffle(SI))
     return I;
 

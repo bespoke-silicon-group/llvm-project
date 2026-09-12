@@ -2591,6 +2591,42 @@ InstructionCost RISCVTTIImpl::getArithmeticInstrCost(
     TTI::OperandValueInfo Op1Info, TTI::OperandValueInfo Op2Info,
     ArrayRef<const Value *> Args, const Instruction *CxtI) const {
 
+  // HammerBlade's integer divider is iterative, not a one-cycle scalar ALU.
+  // Expose its scheduling-model cost to IR transforms as well: in particular,
+  // SCEV expansion must not introduce a divide to replace cheap induction work.
+  // Leave constant divisors to the generic strength-reduction cost model and
+  // keep code-size queries independent of execution latency.
+  if (ST->getCPU() == "hb-rv32" && ST->hasStdExtM() && Ty->isIntegerTy(32) &&
+      !Op2Info.isConstant() &&
+      (Args.size() < 2 || !isa<ConstantInt>(Args[1])) &&
+      (CostKind == TTI::TCK_RecipThroughput || CostKind == TTI::TCK_Latency)) {
+    unsigned MIOpcode = 0;
+    switch (Opcode) {
+    case Instruction::SDiv:
+      MIOpcode = RISCV::DIV;
+      break;
+    case Instruction::UDiv:
+      MIOpcode = RISCV::DIVU;
+      break;
+    case Instruction::SRem:
+      MIOpcode = RISCV::REM;
+      break;
+    case Instruction::URem:
+      MIOpcode = RISCV::REMU;
+      break;
+    default:
+      break;
+    }
+    if (MIOpcode) {
+      const MCSchedModel &SM = ST->getSchedModel();
+      unsigned SC = ST->getInstrInfo()->get(MIOpcode).getSchedClass();
+      if (CostKind == TTI::TCK_RecipThroughput)
+        return static_cast<int64_t>(std::ceil(
+            MCSchedModel::getReciprocalThroughput(*ST, *SM.getSchedClassDesc(SC))));
+      return SM.computeInstrLatency(*ST, SC);
+    }
+  }
+
   // TODO: Handle more cost kinds.
   if (CostKind != TTI::TCK_RecipThroughput)
     return BaseT::getArithmeticInstrCost(Opcode, Ty, CostKind, Op1Info, Op2Info,
@@ -2769,6 +2805,16 @@ void RISCVTTIImpl::getUnrollingPreferences(
   // TODO: More tuning on benchmarks and metrics with changes as needed
   //       would apply to all settings below to enable performance.
 
+  if (ST->getCPU() == "hb-rv32") {
+    BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);
+    // Vanilla has no hardware loop buffer, and its single-issue pipeline
+    // benefits from amortizing loop control and address generation. Permit
+    // partial unrolling, but use a conservative threshold to limit I-cache
+    // growth and avoid forcing every small loop to unroll.
+    UP.Partial = true;
+    UP.PartialThreshold = 100;
+    return;
+  }
 
   if (ST->enableDefaultUnroll())
     return BasicTTIImplBase::getUnrollingPreferences(L, SE, UP, ORE);

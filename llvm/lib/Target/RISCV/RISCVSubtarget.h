@@ -149,6 +149,8 @@ public:
 
   bool enableMachineScheduler() const override { return true; }
 
+  bool enableMachineBlockPlacement(const MachineFunction &MF) const override;
+
   bool enablePostRAScheduler() const override { return UsePostRAScheduler; }
 
   Align getPrefFunctionAlignment() const {
@@ -163,6 +165,10 @@ public:
   /// and preferably modeled with SubtargetFeatures or properties in
   /// initializeProperties().
   RISCVProcFamilyEnum getProcFamily() const { return RISCVProcFamily; }
+
+  // Vanilla implements low-word MUL and integer divide/remainder, but the
+  // three high-word multiply encodings deliberately trap in the RTL.
+  bool hasHighWordMultiply() const { return getCPU() != "hb-rv32"; }
 
   RISCVVRGatherCostModelEnum getVRGatherCostModel() const { return RISCVVRGatherCostModel; }
 
@@ -438,6 +444,10 @@ public:
 
   void overrideSchedPolicy(MachineSchedPolicy &Policy,
                            const SchedRegion &Region) const override;
+
+  void adjustSchedDependency(SUnit *Def, int DefOpIdx, SUnit *Use, int UseOpIdx,
+                             SDep &Dep,
+                             const TargetSchedModel *SchedModel) const override;
 
   void overridePostRASchedPolicy(MachineSchedPolicy &Policy,
                                  const SchedRegion &Region) const override;

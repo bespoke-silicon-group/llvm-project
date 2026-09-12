@@ -1,0 +1,207 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -run-pass=block-placement -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HB
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -riscv-hb-preserve-branch-dense-layout=false -run-pass=block-placement -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=GENERIC
+# RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -run-pass=block-placement -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=GENERIC
+
+# The default only preserves unprofiled, non-size-optimized small dense CFGs.
+--- |
+  define i32 @recursive(i32 %x) { ret i32 %x }
+  define i32 @dense(i32 %x) { ret i32 %x }
+  define i32 @profiled(i32 %x) !prof !0 { ret i32 %x }
+  define i32 @small(i32 %x) optsize { ret i32 %x }
+  define i32 @long_block(i32 %x) { ret i32 %x }
+  !0 = !{!"function_entry_count", i64 100}
+...
+---
+name: recursive
+tracksRegLiveness: true
+frameInfo:
+  hasCalls: true
+body: |
+  ; HB-LABEL: name: recursive
+  ; HB: bb.0:
+  ; HB: bb.2:
+  ; HB: bb.1:
+  ; GENERIC-LABEL: name: recursive
+  ; GENERIC: bb.0:
+  ; GENERIC: bb.2:
+  ; GENERIC: bb.1:
+  bb.0:
+    successors: %bb.1(0x10000000), %bb.2(0x70000000)
+    liveins: $x10
+    BEQ $x10, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    liveins: $x10
+    PseudoCALL target-flags(riscv-call) @recursive, csr_ilp32_lp64, implicit-def dead $x1, implicit $x10, implicit-def $x2, implicit-def $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 2
+    PseudoRET implicit $x10
+...
+---
+name: dense
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: dense
+  ; HB: bb.0:
+  ; HB: bb.1:
+  ; HB: bb.2:
+  ; GENERIC-LABEL: name: dense
+  ; GENERIC: bb.0:
+  ; GENERIC: bb.2:
+  ; GENERIC: bb.1:
+  bb.0:
+    successors: %bb.1(0x10000000), %bb.2(0x70000000)
+    liveins: $x10
+    BEQ $x10, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 2
+    PseudoRET implicit $x10
+...
+---
+name: profiled
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: profiled
+  ; HB: bb.0:
+  ; HB: bb.2:
+  ; HB: bb.1:
+  ; GENERIC-LABEL: name: profiled
+  ; GENERIC: bb.0:
+  ; GENERIC: bb.2:
+  ; GENERIC: bb.1:
+  bb.0:
+    successors: %bb.1(0x10000000), %bb.2(0x70000000)
+    liveins: $x10
+    BEQ $x10, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 2
+    PseudoRET implicit $x10
+...
+---
+name: small
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: small
+  ; HB: bb.0:
+  ; HB: bb.2:
+  ; HB: bb.1:
+  ; GENERIC-LABEL: name: small
+  ; GENERIC: bb.0:
+  ; GENERIC: bb.2:
+  ; GENERIC: bb.1:
+  bb.0:
+    successors: %bb.1(0x10000000), %bb.2(0x70000000)
+    liveins: $x10
+    BEQ $x10, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 2
+    PseudoRET implicit $x10
+...
+---
+name: long_block
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: long_block
+  ; HB: bb.0:
+  ; HB: bb.2:
+  ; HB: bb.1:
+  ; GENERIC-LABEL: name: long_block
+  ; GENERIC: bb.0:
+  ; GENERIC: bb.2:
+  ; GENERIC: bb.1:
+  bb.0:
+    successors: %bb.1(0x10000000), %bb.2(0x70000000)
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    $x10 = ADDI $x10, 1
+    BEQ $x10, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    liveins: $x10
+    $x10 = ADDI $x10, 1
+    PseudoRET implicit $x10
+  bb.2:
+    liveins: $x10
+    $x10 = ADDI $x10, 2
+    PseudoRET implicit $x10
+...

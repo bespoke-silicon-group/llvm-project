@@ -122,6 +122,8 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeKCFIPass(*PR);
   initializeRISCVDeadRegisterDefinitionsPass(*PR);
   initializeRISCVLateBranchOptPass(*PR);
+  initializeRISCVHBStaticBranchPass(*PR);
+  initializeRISCVHBBooleanBranchPass(*PR);
   initializeRISCVMakeCompressibleOptPass(*PR);
   initializeRISCVGatherScatterLoweringPass(*PR);
   initializeRISCVCodeGenPrepareLegacyPassPass(*PR);
@@ -305,7 +307,9 @@ RISCVTargetMachine::createMachineScheduler(MachineSchedContext *C) const {
 ScheduleDAGInstrs *
 RISCVTargetMachine::createPostMachineScheduler(MachineSchedContext *C) const {
   const RISCVSubtarget &ST = C->MF->getSubtarget<RISCVSubtarget>();
-  ScheduleDAGMI *DAG = createSchedPostRA(C);
+  ScheduleDAGMI *DAG = ST.getCPU() == "hb-rv32"
+                           ? createRISCVHBPostMachineScheduler(C)
+                           : createSchedPostRA(C);
 
   if (ST.enablePostMISchedLoadClustering())
     DAG->addMutation(createLoadClusterDAGMutation(
@@ -569,6 +573,10 @@ void RISCVPassConfig::addPreEmitPass() {
   // basic block alignment. It must be done before Branch Relaxation to
   // prevent the adjusted offset exceeding the branch range.
   addPass(createRISCVIndirectBranchTrackingPass());
+  if (TM->getOptLevel() >= CodeGenOptLevel::Default) {
+    addPass(createRISCVHBBooleanBranchPass());
+    addPass(createRISCVHBStaticBranchPass());
+  }
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }

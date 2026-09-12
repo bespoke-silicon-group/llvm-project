@@ -1687,6 +1687,11 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
     break;
   }
   case ISD::MUL: {
+    // HammerBlade implements low-word MUL but not MULH/MULHSU/MULHU. Do not
+    // introduce MULHU as a constant-materialization optimization for hb-rv32.
+    if (!Subtarget->hasHighWordMultiply())
+      break;
+
     // Special case for calculating (mul (and X, C2), C1) where the full product
     // fits in XLen bits. We can shift X left by the number of leading zeros in
     // C2 and shift C1 left by XLen-lzcnt(C2). This will ensure the final

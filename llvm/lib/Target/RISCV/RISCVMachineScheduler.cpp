@@ -13,6 +13,40 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-prera-sched-strategy"
 
+static cl::opt<bool> HBPreserveMemoryBarrierSchedule(
+    "hb-postra-preserve-memory-barriers", cl::Hidden, cl::init(true),
+    cl::desc("Preserve pre-RA scheduling before opaque HB memory barriers"));
+
+namespace {
+class RISCVHBPostScheduleDAG : public ScheduleDAGMI {
+public:
+  explicit RISCVHBPostScheduleDAG(MachineSchedContext *C)
+      : ScheduleDAGMI(C, std::make_unique<PostGenericScheduler>(C),
+                      /*RemoveKillFlags=*/true) {}
+
+  void schedule() override {
+    // A compiler memory barrier separates deliberately staged memory work.
+    // Its opaque interface hides the downstream consumers and outstanding
+    // remote loads from this region's local-latency model. Preserve the
+    // existing schedule here rather than regrouping address calculations and
+    // delaying request issue. Ordinary branch/call boundaries remain eligible.
+    if (HBPreserveMemoryBarrierSchedule) {
+      auto IsOpaqueMemoryBarrier = [](const MachineInstr &MI) {
+        return MI.isInlineAsm() && MI.mayLoadOrStore();
+      };
+      if (llvm::any_of(make_range(begin(), end()), IsOpaqueMemoryBarrier) ||
+          (end() != BB->end() && IsOpaqueMemoryBarrier(*end())))
+        return;
+    }
+    ScheduleDAGMI::schedule();
+  }
+};
+} // namespace
+
+ScheduleDAGMI *llvm::createRISCVHBPostMachineScheduler(MachineSchedContext *C) {
+  return new RISCVHBPostScheduleDAG(C);
+}
+
 RISCV::VSETVLIInfo
 RISCVPreRAMachineSchedStrategy::getVSETVLIInfo(const MachineInstr *MI) const {
   unsigned TSFlags = MI->getDesc().TSFlags;

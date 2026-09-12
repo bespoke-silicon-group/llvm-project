@@ -367,6 +367,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MUL, MVT::i64, Custom);
   }
 
+  // HammerBlade implements low-word MUL but deliberately traps MULH,
+  // MULHSU, and MULHU. Keep the useful M-extension operations legal while
+  // expanding only the unsupported high-word forms.
+  if (!Subtarget.hasHighWordMultiply())
+    setOperationAction({ISD::MULHS, ISD::MULHU}, XLenVT, Expand);
+
   if (!Subtarget.hasStdExtM()) {
     setOperationAction({ISD::SDIV, ISD::UDIV, ISD::SREM, ISD::UREM}, XLenVT,
                        Expand);
@@ -2594,6 +2600,10 @@ bool RISCVTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
   if (!IsLegalVT)
     return false;
 
+  // The integer zero register needs no producer or forwarding delay.
+  if (Subtarget.getCPU() == "hb-rv32" && Imm.isPosZero())
+    return true;
+
   if (getLegalZfaFPImm(Imm, VT) >= 0)
     return true;
 
@@ -2618,7 +2628,14 @@ bool RISCVTargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
   const int Cost =
       FmvCost + RISCVMatInt::getIntMatCost(Imm.bitcastToAPInt(),
                                            Subtarget.getXLen(), Subtarget);
-  return Cost <= FPImmCost;
+  // HammerBlade has a four-cycle integer-to-FP operand forwarding delay.
+  // Prefer a local constant-pool FLW to integer synthesis followed by FMV;
+  // retain zero's register-free materialization and explicit user overrides.
+  const int MaxCost = Subtarget.getCPU() == "hb-rv32" &&
+                              FPImmCost.getNumOccurrences() == 0
+                          ? 1
+                          : FPImmCost;
+  return Cost <= MaxCost;
 }
 
 // TODO: This is very conservative.

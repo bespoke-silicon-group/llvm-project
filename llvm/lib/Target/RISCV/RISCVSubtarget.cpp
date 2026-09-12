@@ -17,6 +17,7 @@
 #include "RISCVFrameLowering.h"
 #include "RISCVSelectionDAGInfo.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -56,6 +57,14 @@ static cl::opt<unsigned> RISCVMaxBuildIntsCost(
 static cl::opt<bool> UseAA("riscv-use-aa", cl::init(true),
                            cl::desc("Enable the use of AA during codegen."));
 
+static cl::opt<unsigned> HBRemoteLoadLatency(
+    "riscv-hb-remote-load-latency", cl::Hidden, cl::init(20),
+    cl::desc("HammerBlade address-space-1 load scheduling latency (0 disables)"));
+
+static cl::opt<bool> HBPreserveBranchDenseLayout(
+    "riscv-hb-preserve-branch-dense-layout", cl::Hidden, cl::init(true),
+    cl::desc("Preserve initial HammerBlade layout for small branch-dense CFGs"));
+
 static cl::opt<unsigned> RISCVMinimumJumpTableEntries(
     "riscv-min-jump-table-entries", cl::Hidden,
     cl::desc("Set minimum number of entries to use a jump table on RISCV"));
@@ -76,6 +85,28 @@ static cl::opt<bool> EnablePExtSIMDCodeGen(
     cl::init(false), cl::Hidden);
 
 void RISCVSubtarget::anchor() {}
+
+bool RISCVSubtarget::enableMachineBlockPlacement(
+    const MachineFunction &MF) const {
+  // Vanilla predicts backward conditional branches taken and forward ones
+  // not taken. Generic fallthrough-chain placement can reverse the common
+  // paths of small branch-dense loops. Preserve their initial layout, but keep
+  // chain formation for large CFGs / long blocks and honor profile and size
+  // guidance. This bounded structural heuristic is not a profitability proof.
+  if (getCPU() != "hb-rv32" || !HBPreserveBranchDenseLayout ||
+      MF.getFunction().hasProfileData() || MF.getFunction().hasOptSize() ||
+      MF.size() > 64 || MF.getInstructionCount() > 20 * MF.size())
+    return true;
+  // The loop-layout heuristic does not model recursive call/return paths.
+  // Preserve generic placement when a direct self-call remains after lowering.
+  for (const MachineBasicBlock &MBB : MF)
+    for (const MachineInstr &MI : MBB)
+      if (MI.isCall())
+        for (const MachineOperand &MO : MI.operands())
+          if (MO.isGlobal() && MO.getGlobal() == &MF.getFunction())
+            return true;
+  return false;
+}
 
 RISCVSubtarget &
 RISCVSubtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,
@@ -230,9 +261,10 @@ unsigned RISCVSubtarget::getMinimumJumpTableEntries() const {
 
 void RISCVSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
                                          const SchedRegion &Region) const {
-  // Do bidirectional scheduling since it provides a more balanced scheduling
-  // leading to better performance. This will increase compile time.
-  Policy.OnlyTopDown = false;
+  // Vanilla is a scalar, in-order core. Top-down scheduling exposes producer
+  // latency without bunching loads immediately before their users. Other
+  // RISC-V processors retain the generic bidirectional policy.
+  Policy.OnlyTopDown = getCPU() == "hb-rv32";
   Policy.OnlyBottomUp = false;
 
   // Disabling the latency heuristic can reduce the number of spills/reloads but
@@ -242,6 +274,52 @@ void RISCVSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
   // Spilling is generally expensive on all RISC-V cores, so always enable
   // register-pressure tracking. This will increase compile time.
   Policy.ShouldTrackPressure = true;
+}
+
+void RISCVSubtarget::adjustSchedDependency(
+    SUnit *Def, int DefOpIdx, SUnit *Use, int UseOpIdx, SDep &Dep,
+    const TargetSchedModel *SchedModel) const {
+  if (getCPU() != "hb-rv32" ||
+      Dep.getKind() != SDep::Data || !Dep.getReg() || !Def->isInstr() ||
+      !Use->isInstr())
+    return;
+
+  const MachineInstr *MI = Def->getInstr();
+  // Inline assembly's operands are variadic, but its explicit register inputs
+  // still consume real results. Post-RA DAG construction otherwise classifies
+  // them as fake implicit operands and gives the data edge zero latency.
+  // Keep the known writer latency; do not attempt to parse arbitrary assembly
+  // or infer an unknown consumer's forwarding path.
+  if (Use->getInstr()->isInlineAsm() && !MI->isPseudo())
+    Dep.setLatency(std::max(Dep.getLatency(),
+                           SchedModel->computeInstrLatency(MI)));
+
+  // Address space 1 explicitly marks remote data. Keep local/unannotated
+  // loads and atomic read-modify-write operations on their normal model.
+  // Twenty cycles is a scheduling heuristic inherited from the HB port,
+  // not a fixed network/cache/DRAM latency. Only adjust register data edges.
+  if (HBRemoteLoadLatency && MI->mayLoad() && !MI->mayStore() &&
+      llvm::any_of(MI->memoperands(), [](const MachineMemOperand *MMO) {
+        return MMO->getAddrSpace() == 1;
+      }))
+    Dep.setLatency(std::max(Dep.getLatency(), unsigned(HBRemoteLoadLatency)));
+
+  // Vanilla's FP input stage reads integer rs1 without the integer bypass
+  // network (stall_bypass_fp_rs1). ALU, multiply, local-load, and FP-to-int
+  // results all require four cycles to this consumer, despite different
+  // latencies to integer consumers. Do not assign execution latency to
+  // coalescible COPYs or lower a long-latency divide/remote-load estimate.
+  if (UseOpIdx == 1 && !MI->isPseudo() && !MI->mayStore()) {
+    switch (Use->getInstr()->getOpcode()) {
+    default:
+      break;
+    case RISCV::FMV_W_X:
+    case RISCV::FCVT_S_W:
+    case RISCV::FCVT_S_WU:
+      Dep.setLatency(std::max(Dep.getLatency(), 4u));
+      break;
+    }
+  }
 }
 
 void RISCVSubtarget::overridePostRASchedPolicy(

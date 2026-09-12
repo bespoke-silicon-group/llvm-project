@@ -19,6 +19,7 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -53,6 +54,10 @@ using namespace llvm;
 static cl::opt<bool> PrintBranchProb(
     "print-bpi", cl::init(false), cl::Hidden,
     cl::desc("Print the branch probability info."));
+
+static cl::opt<bool> HBIntegerEqualityBias(
+    "hb-integer-equality-bias", cl::Hidden, cl::init(true),
+    cl::desc("Prefer unequal outcomes for unconstrained HB integer comparisons"));
 
 static cl::opt<std::string> PrintBranchProbFuncName(
     "print-bpi-func-name", cl::Hidden,
@@ -975,8 +980,29 @@ bool BranchProbabilityInfo::calcZeroHeuristics(const BasicBlock *BB,
 
   Value *RHS = CI->getOperand(1);
   ConstantInt *CV = GetConstantInt(RHS);
-  if (!CV)
-    return false;
+  if (!CV) {
+    // A static predictor is sensitive to arbitrary 50/50 layout ties. Use a
+    // weak unequal bias for otherwise-unconstrained native integer keys. This
+    // is a heuristic, not an assertion about the input distribution. Profile,
+    // loop, cold-path and pointer heuristics have already taken precedence.
+    // Do not bias Boolean / narrow signed values merely widened to i32.
+    Attribute CPU = BB->getParent()->getFnAttribute("target-cpu");
+    if (!HBIntegerEqualityBias || !CPU.isStringAttribute() ||
+        CPU.getValueAsString() != "hb-rv32" ||
+        !CI->isEquality() || !CI->getOperand(0)->getType()->isIntegerTy(32) ||
+        GetConstantInt(CI->getOperand(0)))
+      return false;
+    for (Value *V : CI->operands())
+      if (ComputeNumSignBits(V, CI->getDataLayout()) >= 31)
+        return false;
+    BranchProbability Unequal(5, 8);
+    bool IsNE = CI->getPredicate() == ICmpInst::ICMP_NE;
+    SmallVector<BranchProbability, 2> Probs = {
+        IsNE ? Unequal : Unequal.getCompl(),
+        IsNE ? Unequal.getCompl() : Unequal};
+    setEdgeProbability(BB, Probs);
+    return true;
+  }
 
   // If the LHS is the result of AND'ing a value with a single bit bitmask,
   // we don't have information about probabilities.

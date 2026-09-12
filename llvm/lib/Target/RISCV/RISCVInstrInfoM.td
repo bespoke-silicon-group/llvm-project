@@ -73,10 +73,13 @@ def REMUW   : ALUW_rr<0b0000001, 0b111, "remuw">,
 
 let Predicates = [HasStdExtZmmul] in {
 def : PatGprGpr<mul, MUL>;
+} // Predicates = [HasStdExtZmmul]
+
+let Predicates = [HasStdExtZmmul, HasHighWordMultiply] in {
 def : PatGprGpr<mulhs, MULH>;
 def : PatGprGpr<mulhu, MULHU>;
 def : PatGprGpr<riscv_mulhsu, MULHSU>;
-} // Predicates = [HasStdExtZmmul]
+} // Predicates = [HasStdExtZmmul, HasHighWordMultiply]
 
 let Predicates = [HasStdExtM] in {
 def : PatGprGpr<sdiv, DIV>;
