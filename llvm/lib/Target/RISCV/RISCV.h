@@ -52,6 +52,9 @@ FunctionPass *createRISCVISelDag(RISCVTargetMachine &TM,
 FunctionPass *createRISCVLateBranchOptPass();
 void initializeRISCVLateBranchOptPass(PassRegistry &);
 
+FunctionPass *createRISCVHBStaticBranchPass();
+void initializeRISCVHBStaticBranchPass(PassRegistry &);
+
 FunctionPass *createRISCVMakeCompressibleOptPass();
 void initializeRISCVMakeCompressibleOptPass(PassRegistry &);
 

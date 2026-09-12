@@ -122,6 +122,7 @@ extern "C" LLVM_ABI LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeKCFIPass(*PR);
   initializeRISCVDeadRegisterDefinitionsPass(*PR);
   initializeRISCVLateBranchOptPass(*PR);
+  initializeRISCVHBStaticBranchPass(*PR);
   initializeRISCVMakeCompressibleOptPass(*PR);
   initializeRISCVGatherScatterLoweringPass(*PR);
   initializeRISCVCodeGenPrepareLegacyPassPass(*PR);
@@ -569,6 +570,8 @@ void RISCVPassConfig::addPreEmitPass() {
   // basic block alignment. It must be done before Branch Relaxation to
   // prevent the adjusted offset exceeding the branch range.
   addPass(createRISCVIndirectBranchTrackingPass());
+  if (TM->getOptLevel() >= CodeGenOptLevel::Default)
+    addPass(createRISCVHBStaticBranchPass());
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }
