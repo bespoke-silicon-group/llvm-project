@@ -1,7 +1,8 @@
-; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+m,+a,+f -misched-dcpl -verify-machineinstrs < %s -o /dev/null 2>&1 | FileCheck %s
+; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+m,+a,+f -riscv-lower-fpimm-cost=3 -misched-dcpl -verify-machineinstrs < %s -o /dev/null 2>&1 | FileCheck %s
 
 ; Ordinary integer results need four cycles before the FP-stage rs1 read.
 ; Their latency to another integer instruction must remain unchanged.
+; Hold constant materialization fixed to isolate forwarding from pool policy.
 define float @add_move(i32 %x) {
 ; CHECK: add_move:
 ; CHECK-NEXT: Critical Path(GS-RR ): 9
