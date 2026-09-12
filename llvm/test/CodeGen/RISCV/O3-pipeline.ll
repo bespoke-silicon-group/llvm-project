@@ -199,6 +199,8 @@
 ; CHECK-NEXT:       Machine Copy Propagation Pass
 ; CHECK-NEXT:       RISC-V Late Branch Optimisation Pass
 ; CHECK-NEXT:       RISC-V Indirect Branch Tracking
+; CHECK-NEXT:       RISC-V HammerBlade Boolean Branch Folding
+; CHECK-NEXT:       RISC-V HammerBlade Static Branch Tuning
 ; CHECK-NEXT:       Branch relaxation pass
 ; CHECK-NEXT:       RISC-V Make Compressible
 ; CHECK-NEXT:       Contiguously Lay Out Funclets
