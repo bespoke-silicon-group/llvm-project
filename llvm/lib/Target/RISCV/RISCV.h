@@ -55,6 +55,9 @@ void initializeRISCVLateBranchOptPass(PassRegistry &);
 FunctionPass *createRISCVHBStaticBranchPass();
 void initializeRISCVHBStaticBranchPass(PassRegistry &);
 
+FunctionPass *createRISCVHBBooleanBranchPass();
+void initializeRISCVHBBooleanBranchPass(PassRegistry &);
+
 FunctionPass *createRISCVMakeCompressibleOptPass();
 void initializeRISCVMakeCompressibleOptPass(PassRegistry &);
 

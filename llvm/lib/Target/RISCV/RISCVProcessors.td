@@ -112,7 +112,8 @@ def HB32_RV32 : RISCVProcessorModel<"hb-rv32",
                                      FeatureStdExtI,
                                      FeatureStdExtM,
                                      FeatureStdExtA,
-                                     FeatureStdExtF]>;
+                                     FeatureStdExtF],
+                                    [TunePostRAScheduler]>;
 
 // Preserve the established HammerBlade SDK spelling used in common C flags.
 // It is a tune-only alias; code-generation features continue to come from

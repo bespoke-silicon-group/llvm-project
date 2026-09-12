@@ -1,0 +1,89 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -start-before=postmisched -stop-after=postmisched -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ON
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -enable-post-misched=false -start-before=postmisched -stop-after=postmisched -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -start-before=postmisched -stop-after=postmisched -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+
+# Copy insertion / register allocation can leave independent work ahead of
+# two loads consumed by a branch. Schedule that work into the load-use gap.
+--- |
+  define void @load_compare() { ret void }
+  define void @asm_inputs() { ret void }
+  define void @memory_stage() { ret void }
+...
+---
+name: load_compare
+tracksRegLiveness: true
+body: |
+  ; ON-LABEL: name: load_compare
+  ; ON: $x12 = LW killed $x10, 0
+  ; ON-NEXT: $x13 = LW $x11, 0
+  ; ON-NEXT: $x14 = ADDI killed $x11, 0
+  ; ON-NEXT: BEQ killed $x12, killed $x13, %bb.2
+  ; OFF-LABEL: name: load_compare
+  ; OFF: $x14 = ADDI $x11, 0
+  ; OFF-NEXT: $x12 = LW $x10, 0
+  ; OFF-NEXT: $x13 = LW $x11, 0
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11
+    $x14 = ADDI $x11, 0
+    $x12 = LW $x10, 0
+    $x13 = LW $x11, 0
+    BEQ $x12, $x13, %bb.2
+  bb.1:
+    liveins: $x14
+    PseudoRET implicit $x14
+  bb.2:
+    liveins: $x14
+    PseudoRET implicit $x14
+...
+---
+name: asm_inputs
+tracksRegLiveness: true
+body: |
+  ; ON-LABEL: name: asm_inputs
+  ; ON: $f1_f = FLW killed $x10, 0
+  ; ON-NEXT: $x12 = ADDI $x11, 0
+  ; ON-NEXT: $x13 = ADDI killed $x11, 1
+  ; ON-NEXT: INLINEASM
+  ; OFF-LABEL: name: asm_inputs
+  ; OFF: $x12 = ADDI $x11, 0
+  ; OFF-NEXT: $x13 = ADDI $x11, 1
+  ; OFF-NEXT: $f1_f = FLW $x10, 0
+  bb.0:
+    liveins: $x10, $x11, $f2_f
+    $x12 = ADDI $x11, 0
+    $x13 = ADDI $x11, 1
+    $f1_f = FLW $x10, 0
+    INLINEASM &"fadd.s $0, $1, $2", 1, 458762, def $f3_f, 458761, $f1_f, 458761, $f2_f
+    PseudoRET implicit $x12, implicit $x13, implicit $f3_f
+...
+---
+name: memory_stage
+tracksRegLiveness: true
+body: |
+  ; ON-LABEL: name: memory_stage
+  ; OFF-LABEL: name: memory_stage
+  ; ON: $x12 = SLLI $x10, 2
+  ; ON-NEXT: $x12 = ADD $x11, killed $x12
+  ; ON-NEXT: $f1_f = FLW killed $x12, 0
+  ; ON-NEXT: $x13 = SLLI killed $x10, 3
+  ; ON-NEXT: $x13 = ADD killed $x11, killed $x13
+  ; ON-NEXT: $f2_f = FLW killed $x13, 0
+  ; ON-NEXT: INLINEASM &"", 25
+  ; OFF: $x12 = SLLI $x10, 2
+  ; OFF-NEXT: $x12 = ADD $x11, $x12
+  ; OFF-NEXT: $f1_f = FLW $x12, 0
+  ; OFF-NEXT: $x13 = SLLI $x10, 3
+  ; OFF-NEXT: $x13 = ADD $x11, $x13
+  ; OFF-NEXT: $f2_f = FLW $x13, 0
+  bb.0:
+    liveins: $x10, $x11
+    $x12 = SLLI $x10, 2
+    $x12 = ADD $x11, $x12
+    $f1_f = FLW $x12, 0
+    $x13 = SLLI $x10, 3
+    $x13 = ADD $x11, $x13
+    $f2_f = FLW $x13, 0
+    INLINEASM &"", 25
+    PseudoRET implicit $f1_f, implicit $f2_f
+...

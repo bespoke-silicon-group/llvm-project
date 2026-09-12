@@ -285,6 +285,15 @@ void RISCVSubtarget::adjustSchedDependency(
     return;
 
   const MachineInstr *MI = Def->getInstr();
+  // Inline assembly's operands are variadic, but its explicit register inputs
+  // still consume real results. Post-RA DAG construction otherwise classifies
+  // them as fake implicit operands and gives the data edge zero latency.
+  // Keep the known writer latency; do not attempt to parse arbitrary assembly
+  // or infer an unknown consumer's forwarding path.
+  if (Use->getInstr()->isInlineAsm() && !MI->isPseudo())
+    Dep.setLatency(std::max(Dep.getLatency(),
+                           SchedModel->computeInstrLatency(MI)));
+
   // Address space 1 explicitly marks remote data. Keep local/unannotated
   // loads and atomic read-modify-write operations on their normal model.
   // Twenty cycles is a scheduling heuristic inherited from the HB port,

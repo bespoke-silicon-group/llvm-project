@@ -19,6 +19,8 @@
 
 namespace llvm {
 
+ScheduleDAGMI *createRISCVHBPostMachineScheduler(MachineSchedContext *C);
+
 /// A GenericScheduler implementation for RISCV pre RA scheduling.
 class RISCVPreRAMachineSchedStrategy : public GenericScheduler {
   const RISCVSubtarget *ST;

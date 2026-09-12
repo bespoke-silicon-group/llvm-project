@@ -1,0 +1,290 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -run-pass=riscv-hb-boolean-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=HB
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -enable-riscv-hb-boolean-branches=false -run-pass=riscv-hb-boolean-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+# RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -run-pass=riscv-hb-boolean-branch -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=OFF
+
+--- |
+  define void @joined_masks() { ret void }
+  define void @clobber() { ret void }
+  define void @unknown_mask() { ret void }
+  define void @live_result() { ret void }
+  define void @read_modify_write() { ret void }
+  define void @backedge_live() { ret void }
+  define void @snez() { ret void }
+  define void @self_compare() { ret void }
+  define void @mixed_sources() { ret void }
+  define void @mixed_predicates() { ret void }
+  define void @unproven_cycle() { ret void }
+...
+---
+name: joined_masks
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: joined_masks
+  ; OFF-LABEL: name: joined_masks
+  ; HB-NOT: SLTIU
+  ; HB-NOT: ANDI
+  ; HB: bb.3:
+  ; HB: liveins: $x11
+  ; HB: BNE killed $x11, $x0, %bb.5
+  ; OFF: SLTIU
+  ; OFF: ANDI
+  ; OFF: BEQ $x12, $x0, %bb.5
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11
+    BNE $x10, $x0, %bb.2
+  bb.1:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+    $x12 = SLTIU killed $x11, 1
+    PseudoBR %bb.3
+  bb.2:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+    $x12 = SLTIU killed $x11, 1
+    PseudoBR %bb.3
+  bb.3:
+    successors: %bb.4(0x40000000), %bb.5(0x40000000)
+    liveins: $x12
+    $x12 = ANDI $x12, 1
+    BEQ $x12, $x0, %bb.5
+  bb.4:
+    PseudoRET
+  bb.5:
+    PseudoRET
+...
+---
+name: clobber
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: clobber
+  ; OFF-LABEL: name: clobber
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: $x11 = ADDI $x11, 1
+  ; HB: BEQ $x12, $x0, %bb.2
+  ; OFF: BEQ $x12, $x0, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x11
+    $x12 = SLTIU $x11, 1
+    $x11 = ADDI $x11, 1
+    BEQ $x12, $x0, %bb.2
+  bb.1:
+    PseudoRET
+  bb.2:
+    PseudoRET
+...
+---
+name: unknown_mask
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: unknown_mask
+  ; OFF-LABEL: name: unknown_mask
+  ; HB: $x12 = ANDI $x12, 1
+  ; HB: BEQ $x12, $x0, %bb.2
+  ; OFF: BEQ $x12, $x0, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x12
+    $x12 = ANDI $x12, 1
+    BEQ $x12, $x0, %bb.2
+  bb.1:
+    PseudoRET
+  bb.2:
+    PseudoRET
+...
+---
+name: live_result
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: live_result
+  ; OFF-LABEL: name: live_result
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: BNE killed $x11, $x0, %bb.2
+  ; OFF: BEQ $x12, $x0, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x11
+    $x12 = SLTIU $x11, 1
+    BEQ $x12, $x0, %bb.2
+  bb.1:
+    liveins: $x12
+    PseudoRET implicit $x12
+  bb.2:
+    liveins: $x12
+    PseudoRET implicit $x12
+...
+---
+name: read_modify_write
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: read_modify_write
+  ; OFF-LABEL: name: read_modify_write
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: BNE killed $x11, $x0, %bb.2
+  ; HB: $x12 = ADDI killed $x12, 1
+  ; OFF: BEQ $x12, $x0, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x11
+    $x12 = SLTIU $x11, 1
+    BEQ $x12, $x0, %bb.2
+  bb.1:
+    liveins: $x12
+    $x12 = ADDI $x12, 1
+    PseudoRET implicit $x12
+  bb.2:
+    PseudoRET
+...
+---
+name: backedge_live
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: backedge_live
+  ; OFF-LABEL: name: backedge_live
+  ; HB: bb.1:
+  ; HB: $x10 = ADDI killed $x12, 1
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: BEQ $x11, $x0, %bb.1
+  ; OFF: BNE $x12, $x0, %bb.1
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x11
+    $x12 = ADDI $x0, 0
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x11, $x12
+    $x10 = ADDI $x12, 1
+    $x12 = SLTIU $x11, 1
+    BNE $x12, $x0, %bb.1
+  bb.2:
+    liveins: $x10
+    PseudoRET implicit $x10
+...
+---
+name: snez
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: snez
+  ; OFF-LABEL: name: snez
+  ; HB-NOT: SLTU
+  ; HB: BNE $x0, killed $x11, %bb.2
+  ; OFF: SLTU
+  ; OFF: BNE $x0, $x12, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x11
+    $x12 = SLTU $x0, killed $x11
+    BNE $x0, $x12, %bb.2
+  bb.1:
+    PseudoRET
+  bb.2:
+    PseudoRET
+...
+---
+name: self_compare
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: self_compare
+  ; OFF-LABEL: name: self_compare
+  ; HB: $x12 = SLTIU $x12, 1
+  ; HB: BEQ $x12, $x0, %bb.2
+  ; OFF: BEQ $x12, $x0, %bb.2
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x12
+    $x12 = SLTIU $x12, 1
+    BEQ $x12, $x0, %bb.2
+  bb.1:
+    PseudoRET
+  bb.2:
+    PseudoRET
+...
+---
+name: mixed_sources
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: mixed_sources
+  ; OFF-LABEL: name: mixed_sources
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: $x12 = SLTIU $x13, 1
+  ; HB: BEQ $x12, $x0, %bb.5
+  ; OFF: BEQ $x12, $x0, %bb.5
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11, $x13
+    BNE $x10, $x0, %bb.2
+  bb.1:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+    $x12 = SLTIU $x11, 1
+    PseudoBR %bb.3
+  bb.2:
+    successors: %bb.3(0x80000000)
+    liveins: $x13
+    $x12 = SLTIU $x13, 1
+    PseudoBR %bb.3
+  bb.3:
+    successors: %bb.4(0x40000000), %bb.5(0x40000000)
+    liveins: $x12
+    BEQ $x12, $x0, %bb.5
+  bb.4:
+    PseudoRET
+  bb.5:
+    PseudoRET
+...
+---
+name: mixed_predicates
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: mixed_predicates
+  ; OFF-LABEL: name: mixed_predicates
+  ; HB: $x12 = SLTIU $x11, 1
+  ; HB: $x12 = SLTU $x0, $x11
+  ; HB: BEQ $x12, $x0, %bb.5
+  ; OFF: BEQ $x12, $x0, %bb.5
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11
+    BNE $x10, $x0, %bb.2
+  bb.1:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+    $x12 = SLTIU $x11, 1
+    PseudoBR %bb.3
+  bb.2:
+    successors: %bb.3(0x80000000)
+    liveins: $x11
+    $x12 = SLTU $x0, $x11
+    PseudoBR %bb.3
+  bb.3:
+    successors: %bb.4(0x40000000), %bb.5(0x40000000)
+    liveins: $x12
+    BEQ $x12, $x0, %bb.5
+  bb.4:
+    PseudoRET
+  bb.5:
+    PseudoRET
+...
+---
+name: unproven_cycle
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: unproven_cycle
+  ; OFF-LABEL: name: unproven_cycle
+  ; HB: $x12 = ANDI $x12, 1
+  ; HB: BEQ $x12, $x0, %bb.1
+  ; OFF: BEQ $x12, $x0, %bb.1
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x12
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x12
+    $x12 = ANDI $x12, 1
+    BEQ $x12, $x0, %bb.1
+  bb.2:
+    PseudoRET
+...
