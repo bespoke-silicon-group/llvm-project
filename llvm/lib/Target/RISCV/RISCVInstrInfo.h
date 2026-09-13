@@ -104,6 +104,9 @@ public:
            MI.getOperand(1).getReg() == RISCV::X0;
   }
 
+  bool shouldSplitPHICriticalEdge(const MachineBasicBlock &From,
+                                  const MachineBasicBlock &To) const override;
+
   void copyPhysRegVector(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI, const DebugLoc &DL,
                          MCRegister DstReg, MCRegister SrcReg, bool KillSrc,

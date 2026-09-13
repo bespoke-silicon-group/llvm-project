@@ -2186,6 +2186,15 @@ public:
         .addReg(Src);
   }
 
+  /// Whether splitting this non-backedge PHI critical edge is profitable
+  /// even when it cannot improve coalescing. Splitting can keep expensive
+  /// copies off unrelated successor paths. Targets must account for the
+  /// extra branch/code-size cost; the default retains the generic policy.
+  virtual bool shouldSplitPHICriticalEdge(const MachineBasicBlock &From,
+                                          const MachineBasicBlock &To) const {
+    return false;
+  }
+
   /// During PHI eleimination lets target to make necessary checks and
   /// insert the copy to the PHI destination register in a target specific
   /// manner.

@@ -795,7 +795,10 @@ bool PHIEliminationImpl::SplitPHIEdges(
       //
       // If the copy would be a kill, there is no need to split the edge.
       bool ShouldSplit = isLiveOutPastPHIs(Reg, PreMBB);
-      if (!ShouldSplit && !NoPhiElimLiveOutEarlyExit)
+      bool TargetSplit =
+          MF.getSubtarget().getInstrInfo()->shouldSplitPHICriticalEdge(*PreMBB,
+                                                                       MBB);
+      if (!ShouldSplit && !NoPhiElimLiveOutEarlyExit && !TargetSplit)
         continue;
       if (ShouldSplit) {
         LLVM_DEBUG(dbgs() << printReg(Reg) << " live-out before critical edge "
@@ -828,7 +831,7 @@ bool PHIEliminationImpl::SplitPHIEdges(
         // Split unless this edge is entering CurLoop from an outer loop.
         ShouldSplit = PreLoop && !PreLoop->contains(CurLoop);
       }
-      if (!ShouldSplit && !SplitAllCriticalEdges)
+      if (!ShouldSplit && !SplitAllCriticalEdges && !TargetSplit)
         continue;
       if (!(P ? PreMBB->SplitCriticalEdge(&MBB, *P, LiveInSets, &MDTU)
               : PreMBB->SplitCriticalEdge(&MBB, *MFAM, LiveInSets, &MDTU))) {

@@ -38,6 +38,37 @@
 
 using namespace llvm;
 
+static cl::opt<bool> HBSplitFPCopyEdges(
+    "hb-split-fp-copy-edges", cl::Hidden, cl::init(true),
+    cl::desc("Keep groups of HB FP PHI copies on their incoming edges"));
+
+bool RISCVInstrInfo::shouldSplitPHICriticalEdge(
+    const MachineBasicBlock &From, const MachineBasicBlock &To) const {
+  const MachineFunction &MF = *From.getParent();
+  if (!HBSplitFPCopyEdges || MF.getFunction().hasOptSize() ||
+      MF.getSubtarget<RISCVSubtarget>().getCPU() != "hb-rv32")
+    return false;
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  unsigned Copies = 0;
+  for (const MachineInstr &Phi : To.phis()) {
+    Register Dst = Phi.getOperand(0).getReg();
+    if (!Dst.isVirtual() ||
+        !RISCV::FPR32RegClass.hasSubClassEq(MRI.getRegClass(Dst)))
+      continue;
+    for (unsigned I = 1, E = Phi.getNumOperands(); I < E; I += 2) {
+      if (Phi.getOperand(I + 1).getMBB() != &From ||
+          Phi.getOperand(I).isUndef())
+        continue;
+      // Several serial FP copies cost more than an edge block. In particular,
+      // fallback values reused by later PHIs cannot coalesce with all loaded
+      // results. Leave single copies and integer-only PHIs on generic policy.
+      if (++Copies >= 4)
+        return true;
+    }
+  }
+  return false;
+}
+
 #define GEN_CHECK_COMPRESS_INSTR
 #include "RISCVGenCompressInstEmitter.inc"
 
