@@ -15,6 +15,7 @@
 
 #include "RISCV.h"
 #include "RISCVTargetMachine.h"
+#include "llvm/ADT/FloatingPointMode.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -32,6 +33,10 @@ using namespace llvm;
 #define DEBUG_TYPE "riscv-codegenprepare"
 #define PASS_NAME "RISC-V CodeGenPrepare"
 
+static cl::opt<bool> HBDelayConditionalFAdd(
+    "hb-delay-conditional-fadd", cl::Hidden, cl::init(true),
+    cl::desc("Keep HB conditional-load additions near their final consumers"));
+
 namespace {
 class RISCVCodeGenPrepare : public InstVisitor<RISCVCodeGenPrepare, bool> {
   Function &F;
@@ -46,6 +51,7 @@ public:
   bool run();
   bool visitInstruction(Instruction &I) { return false; }
   bool visitAnd(BinaryOperator &BO);
+  bool visitPHINode(PHINode &PN);
   bool visitIntrinsicInst(IntrinsicInst &I);
   bool expandVPStrideLoad(IntrinsicInst &I);
   bool widenVPMerge(IntrinsicInst &I);
@@ -69,6 +75,56 @@ public:
   }
 };
 } // namespace
+
+// InstCombine may fold add(phi(load, 0), base) into the load's predecessor.
+// On an in-order core this can wait for the load before later independent
+// loads have issued. Restore the merge and delay the addition to its sole
+// arithmetic consumer. Do not move/speculate the load or change FP grouping.
+bool RISCVCodeGenPrepare::visitPHINode(PHINode &PN) {
+  if (!HBDelayConditionalFAdd || ST->getCPU() != "hb-rv32" || F.hasOptSize() ||
+      F.hasFnAttribute(Attribute::StrictFP) ||
+      F.getDenormalMode(APFloat::IEEEsingle()) != DenormalMode::getIEEE() ||
+      !PN.getType()->isFloatTy() || PN.getNumIncomingValues() != 2 ||
+      !PN.hasOneUse())
+    return false;
+  auto *Use = dyn_cast<BinaryOperator>(*PN.user_begin());
+  if (!Use || Use->getParent() == PN.getParent() || !isa<FPMathOperator>(Use) ||
+      !Use->hasNoNaNs() || !Use->hasNoSignedZeros() || !DT->dominates(&PN, Use))
+    return false;
+  for (unsigned Idx = 0; Idx != 2; ++Idx) {
+    auto *Add = dyn_cast<BinaryOperator>(PN.getIncomingValue(Idx));
+    Value *Base = PN.getIncomingValue(1 - Idx);
+    if (!Add || Add->getOpcode() != Instruction::FAdd || !Add->hasOneUse() ||
+        !Add->hasNoNaNs() || !Add->hasNoSignedZeros() ||
+        Add->getParent() != PN.getIncomingBlock(Idx) ||
+        Add->getParent()->getSingleSuccessor() != PN.getParent() ||
+        !DT->dominates(Base, Use))
+      continue;
+    unsigned BaseIdx = Add->getOperand(0) == Base ? 0 : 1;
+    if (Add->getOperand(BaseIdx) != Base)
+      continue;
+    auto *Load = dyn_cast<LoadInst>(Add->getOperand(1 - BaseIdx));
+    if (!Load || Load->getParent() != Add->getParent())
+      continue;
+    auto *Loaded =
+        PHINode::Create(PN.getType(), 2, "hb.loaded", PN.getIterator());
+    Loaded->addIncoming(Load, PN.getIncomingBlock(Idx));
+    Loaded->addIncoming(ConstantFP::get(PN.getType(), 0.0),
+                        PN.getIncomingBlock(1 - Idx));
+    auto *Late = BinaryOperator::CreateFAdd(BaseIdx == 0 ? Base : Loaded,
+                                            BaseIdx == 0 ? Loaded : Base,
+                                            "hb.late.add", Use->getIterator());
+    // On the fallback path the only user already ignores signed zero and
+    // forbids NaNs. Other flags are intersected rather than newly promised.
+    Late->setFastMathFlags(Add->getFastMathFlags() & Use->getFastMathFlags());
+    Late->setDebugLoc(Add->getDebugLoc());
+    PN.replaceAllUsesWith(Late);
+    PN.eraseFromParent();
+    Add->eraseFromParent();
+    return true;
+  }
+  return false;
+}
 
 // Try to optimize (i64 (and (zext/sext (i32 X), C1))) if C1 has bit 31 set,
 // but bits 63:32 are zero. If we know that bit 31 of X is 0, we can fill
