@@ -1,12 +1,14 @@
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll | FileCheck %s --check-prefix=HB
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll -hb-preserve-staged-loops=false | FileCheck %s --check-prefix=OFF
 ; Explicit requests retain priority over the staged-loop policy.
-; Bound automatic replication of manually staged memory-clobber batches.
+; Bound automatic replication of live staged memory-clobber batches. Merely
+; issuing many volatile loads does not make their unused results live.
 
 ; HB-LABEL: define void @wide(
-; HB-COUNT-16: load volatile
+; HB-COUNT-32: load volatile
 ; HB-NOT: load volatile
-; HB: br i1
+; HB-NOT: br i1
+; HB: ret void
 ; OFF-LABEL: define void @wide(
 ; OFF-COUNT-32: load volatile
 ; OFF-NOT: br i1
@@ -74,9 +76,10 @@ exit:
 }
 
 ; HB-LABEL: define void @small(
-; HB-COUNT-16: load volatile
+; HB-COUNT-32: load volatile
 ; HB-NOT: load volatile
-; HB: br i1
+; HB-NOT: br i1
+; HB: ret void
 ; OFF-LABEL: define void @small(
 ; OFF-COUNT-32: load volatile
 ; OFF-NOT: br i1

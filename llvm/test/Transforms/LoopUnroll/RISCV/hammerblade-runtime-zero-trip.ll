@@ -3,13 +3,17 @@
 
 ; No noalias or overflow promises: overlapping buffers and loop-carried memory
 ; dependencies remain legal. Preserve the explicit zero-trip exit and generate
-; a remainder loop. Differential execution covers lengths 0-9 and boundaries.
+; no setup/remainder for an unknown trip count. Differential execution covers
+; lengths 0-9 and boundaries. A separately guarded long-loop test covers the
+; runtime-unroll positive case.
 ; CHECK-LABEL: define void @stream(
 ; CHECK: %zero = icmp eq i32 %n, 0
 ; CHECK: br i1 %zero, label %exit, label
 ; CHECK: loop:
-; CHECK-COUNT-8: load i32
-; CHECK: epil
+; CHECK-COUNT-2: load i32
+; CHECK-NOT: load i32
+; CHECK-NOT: epil
+; CHECK: ret void
 ; OFF-LABEL: define void @stream(
 ; OFF: loop:
 ; OFF-COUNT-2: load i32
