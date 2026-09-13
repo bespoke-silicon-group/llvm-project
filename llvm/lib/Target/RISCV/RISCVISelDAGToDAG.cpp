@@ -17,8 +17,10 @@
 #include "RISCVISelLowering.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVSelectionDAGInfo.h"
+#include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/SDPatternMatch.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/Support/Alignment.h"
 #include "llvm/Support/Debug.h"
@@ -35,6 +37,10 @@ static cl::opt<bool> UsePseudoMovImm(
     cl::desc("Use a rematerializable pseudoinstruction for 2 instruction "
              "constant materialization"),
     cl::init(false));
+
+static cl::opt<bool> HBHoistBoundaryImmediate(
+    "hb-hoist-boundary-immediate", cl::Hidden, cl::init(true),
+    cl::desc("Use a hoistable negative immediate at HB loop add boundaries"));
 
 #define GET_DAGISEL_BODY RISCVDAGToDAGISel
 #include "RISCVGenDAGISel.inc"
@@ -1023,6 +1029,26 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
   bool HasBitTest = Subtarget->hasBEXTILike();
 
   switch (Opcode) {
+  case ISD::ADD: {
+    // The positive boundary of simm12 takes two dependent ADDIs. Its negative
+    // fits one ADDI from x0: SUB by that value has the same static cost, but
+    // lets MachineLICM hoist materialization out of a single-block loop. Avoid
+    // increasing live ranges in straight-line or size-optimized code.
+    if (HBHoistBoundaryImmediate && Subtarget->getCPU() == "hb-rv32" &&
+        VT == MVT::i32 && !shouldOptForSize(MF)) {
+      const BasicBlock *BB = FuncInfo->MBB->getBasicBlock();
+      auto *C = dyn_cast<ConstantSDNode>(Node->getOperand(1));
+      if (BB && C && is_contained(successors(BB), BB)) {
+        int64_t Imm = C->getSExtValue();
+        if (!isInt<12>(Imm) && isInt<12>(-Imm)) {
+          SDValue Neg = selectImm(CurDAG, DL, VT, -Imm, *Subtarget);
+          CurDAG->SelectNodeTo(Node, RISCV::SUB, VT, Node->getOperand(0), Neg);
+          return;
+        }
+      }
+    }
+    break;
+  }
   case ISD::Constant: {
     assert(VT == Subtarget->getXLenVT() && "Unexpected VT");
     auto *ConstNode = cast<ConstantSDNode>(Node);
