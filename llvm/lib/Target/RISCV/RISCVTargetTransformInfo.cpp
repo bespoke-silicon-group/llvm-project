@@ -9,11 +9,13 @@
 #include "RISCVTargetTransformInfo.h"
 #include "MCTargetDesc/RISCVMatInt.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/CodeGen/CostTable.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/PatternMatch.h"
@@ -43,6 +45,15 @@ static cl::opt<unsigned>
                     cl::desc("Set the lower bound of a trip count to decide on "
                              "vectorization while tail-folding."),
                     cl::init(5), cl::Hidden);
+
+static cl::opt<bool> HBPreserveStagedLoops(
+    "hb-preserve-staged-loops", cl::Hidden, cl::init(true),
+    cl::desc("Avoid automatic HB unrolling of heavily staged memory loops"));
+
+static cl::opt<bool> HBRuntimeMemoryUnroll(
+    "hb-runtime-memory-unroll", cl::Hidden, cl::init(true),
+    cl::desc(
+        "Expose independent work in small HB runtime-counted memory loops"));
 
 InstructionCost
 RISCVTTIImpl::getRISCVInstructionCost(ArrayRef<unsigned> OpCodes, MVT VT,
@@ -2813,6 +2824,84 @@ void RISCVTTIImpl::getUnrollingPreferences(
     // growth and avoid forcing every small loop to unroll.
     UP.Partial = true;
     UP.PartialThreshold = 100;
+    // Runtime-counted scalar streaming loops otherwise remain rolled because
+    // Vanilla has no loop buffer. A small factor amortizes branch/address work
+    // and exposes independent loads without duplicating staged or complex CFGs.
+    // Keep constant-trip and explicitly requested unrolling on existing policy.
+    if (HBRuntimeMemoryUnroll && L->getNumBlocks() == 1 &&
+        !SE.getSmallConstantTripCount(L) &&
+        !L->getHeader()->getParent()->hasOptSize() &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.count") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.full") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.enable")) {
+      unsigned Loads = 0, Stores = 0, Insns = 0;
+      bool Simple = true;
+      for (const Instruction &I : *L->getHeader()) {
+        ++Insns;
+        if (const auto *LD = dyn_cast<LoadInst>(&I)) {
+          ++Loads;
+          Simple &= LD->isSimple() && !LD->getType()->isVectorTy();
+        } else if (const auto *ST = dyn_cast<StoreInst>(&I)) {
+          ++Stores;
+          Simple &=
+              ST->isSimple() && !ST->getValueOperand()->getType()->isVectorTy();
+        } else if (isa<CallBase>(I) || I.mayReadOrWriteMemory()) {
+          Simple = false;
+        }
+      }
+      if (Simple && Insns <= 16 && Loads >= 2 && Stores >= 1) {
+        UP.Runtime = true;
+        UP.DefaultUnrollRuntimeCount = 4;
+        UP.MaxCount = std::min(UP.MaxCount, 4u);
+      }
+    }
+    // An opaque memory clobber often separates a manually staged batch from
+    // its consumers. Replicating an already wide batch increases live ranges
+    // and spills; duplicating its enclosing loops also grows the hot working
+    // set of this scalar core's small instruction cache. Preserve explicit
+    // source unroll requests, but do not automatically replicate these loops.
+    if (HBPreserveStagedLoops &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.count") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.full") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.enable")) {
+      bool MemoryClobber = false;
+      unsigned LoadWords = 0, StoreWords = 0;
+      const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
+      for (const BasicBlock *BB : L->blocks()) {
+        for (const Instruction &I : *BB) {
+          if (const auto *CB = dyn_cast<CallBase>(&I))
+            if (const auto *IA = dyn_cast<InlineAsm>(CB->getCalledOperand()))
+              MemoryClobber |= IA->getConstraintString().contains("~{memory}");
+          Type *Ty = nullptr;
+          if (const auto *LD = dyn_cast<LoadInst>(&I))
+            Ty = LD->getType();
+          else if (const auto *ST = dyn_cast<StoreInst>(&I))
+            Ty = ST->getValueOperand()->getType();
+          if (!Ty || Ty->isScalableTy())
+            continue;
+          unsigned Words =
+              divideCeil(DL.getTypeStoreSize(Ty).getFixedValue(), 4);
+          if (isa<LoadInst>(I))
+            LoadWords += Words;
+          else
+            StoreWords += Words;
+        }
+      }
+      if (MemoryClobber &&
+          (!L->getSubLoops().empty() || LoadWords >= 16 || StoreWords >= 16)) {
+        UP.Threshold = 0;
+        UP.Partial = false;
+        UP.Runtime = false;
+      } else if (MemoryClobber && std::max(LoadWords, StoreWords) >= 4) {
+        // Leave roughly half of either scalar register file for addresses,
+        // loop state and arithmetic instead of replicating the live batch
+        // until it consumes all allocatable registers. i64 transfers on RV32
+        // occupy two words, even though they are one memory operation in IR.
+        unsigned Count = 16 / std::max(LoadWords, StoreWords);
+        UP.MaxCount = std::min(UP.MaxCount, Count);
+        UP.FullUnrollMaxCount = std::min(UP.FullUnrollMaxCount, Count);
+      }
+    }
     return;
   }
 
