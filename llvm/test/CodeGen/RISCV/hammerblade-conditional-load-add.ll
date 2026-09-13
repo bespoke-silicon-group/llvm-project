@@ -1,6 +1,7 @@
-; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -stop-after=riscv-codegenprepare -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=HB,ALL
+; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -stop-after=riscv-codegenprepare %s -o - | FileCheck %s --check-prefixes=OFF,ALL
+; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-delay-conditional-fadd=true -stop-after=riscv-codegenprepare -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=HB,ALL
 ; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-delay-conditional-fadd=false -stop-after=riscv-codegenprepare %s -o - | FileCheck %s --check-prefixes=OFF,ALL
-; RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -mattr=+f -stop-after=riscv-codegenprepare %s -o - | FileCheck %s --check-prefixes=OFF,ALL
+; RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -mattr=+f -hb-delay-conditional-fadd=true -stop-after=riscv-codegenprepare %s -o - | FileCheck %s --check-prefixes=OFF,ALL
 
 ; Undo conditional-load add folding only when FP flags permit the fallback
 ; identity. Preserve the loaded path's operand order and arithmetic grouping.
@@ -11,7 +12,7 @@
 ; HB-NEXT: br label %join
 ; HB: %hb.loaded = phi float [ %x, %loaded ], [ 0.000000e+00, %entry ]
 ; HB: consume:
-; HB-NEXT: %hb.late.add = fadd nnan nsz float %base, %hb.loaded
+; HB: %hb.late.add = fadd nnan nsz float %base, %hb.loaded
 ; HB-NEXT: %answer = fmul nnan nsz float %hb.late.add, %later
 ; OFF-LABEL: define float @delay(
 ; OFF: %sum = fadd nnan nsz float %base, %x
@@ -28,8 +29,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @size_optimized(
@@ -49,8 +62,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; HB-LABEL: define float @delay_reversed(
@@ -59,7 +84,7 @@ consume:
 ; HB-NEXT: br label %join
 ; HB: %hb.loaded = phi float [ %x, %loaded ], [ 0.000000e+00, %entry ]
 ; HB: consume:
-; HB-NEXT: %hb.late.add = fadd nnan nsz float %hb.loaded, %base
+; HB: %hb.late.add = fadd nnan nsz float %hb.loaded, %base
 ; HB-NEXT: %answer = fmul nnan nsz float %hb.late.add, %later
 ; OFF-LABEL: define float @delay_reversed(
 ; OFF: %sum = fadd nnan nsz float %x, %base
@@ -76,8 +101,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @strict(
@@ -97,8 +134,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @signed_zero(
@@ -118,8 +167,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @nan(
@@ -139,8 +200,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @strict_user(
@@ -160,8 +233,20 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul  float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }
 
 ; ALL-LABEL: define float @multiple_users(
@@ -181,6 +266,14 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
   %extra = fadd nnan nsz float %answer, %merged
   ret float %extra
@@ -205,6 +298,18 @@ join:
   %later = load float, ptr %q
   br label %consume
 consume:
+  %q1 = getelementptr float, ptr %q, i32 1
+  %q2 = getelementptr float, ptr %q, i32 2
+  %q3 = getelementptr float, ptr %q, i32 3
+  %q4 = getelementptr float, ptr %q, i32 4
+  %a1 = load float, ptr %q1
+  %a2 = load float, ptr %q2
+  %a3 = load float, ptr %q3
+  %a4 = load float, ptr %q4
   %answer = fmul nnan nsz float %merged, %later
-  ret float %answer
+  %pair1 = fadd float %a1, %a2
+  %pair2 = fadd float %a3, %a4
+  %pairs = fadd float %pair1, %pair2
+  %result = fadd float %answer, %pairs
+  ret float %result
 }

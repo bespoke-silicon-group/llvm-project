@@ -16,17 +16,26 @@
 #include "RISCV.h"
 #include "RISCVTargetMachine.h"
 #include "llvm/ADT/FloatingPointMode.h"
+#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/CFG.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/IR/ProfDataUtils.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/Local.h"
+#include <optional>
 
 using namespace llvm;
 
@@ -34,8 +43,8 @@ using namespace llvm;
 #define PASS_NAME "RISC-V CodeGenPrepare"
 
 static cl::opt<bool> HBDelayConditionalFAdd(
-    "hb-delay-conditional-fadd", cl::Hidden, cl::init(true),
-    cl::desc("Keep HB conditional-load additions near their final consumers"));
+    "hb-delay-conditional-fadd", cl::Hidden, cl::init(false),
+    cl::desc("Experimentally delay HB conditional-load additions"));
 
 namespace {
 class RISCVCodeGenPrepare : public InstVisitor<RISCVCodeGenPrepare, bool> {
@@ -43,6 +52,15 @@ class RISCVCodeGenPrepare : public InstVisitor<RISCVCodeGenPrepare, bool> {
   const DataLayout *DL;
   const DominatorTree *DT;
   const RISCVSubtarget *ST;
+  // The HB profitability checks need these only after finding a legal match.
+  // This transform does not change the CFG, so they remain valid throughout.
+  std::optional<LoopInfo> HBLI;
+  std::optional<PostDominatorTree> HBPDT;
+  bool HBIrreducible = false;
+
+  bool shouldDelayHBConditionalFAdd(PHINode &PN, BinaryOperator &Add,
+                                    LoadInst &Load, BinaryOperator &Use,
+                                    unsigned LoadedIdx);
 
 public:
   RISCVCodeGenPrepare(Function &F, const DominatorTree *DT,
@@ -76,6 +94,164 @@ public:
 };
 } // namespace
 
+// A later request cannot overlap the first load if computing its address
+// already needs the merged value or another new load. Permit cheap address
+// arithmetic rooted in values available at the merge, but not pointer chasing.
+static bool isIndependentHBLoadAddress(Value *V, const PHINode &PN,
+                                       const DominatorTree &DT,
+                                       SmallPtrSetImpl<Value *> &Visited) {
+  auto *I = dyn_cast<Instruction>(V);
+  if (!I || DT.dominates(I, &PN))
+    return V != &PN;
+  if (Visited.size() >= 16 || I->mayReadOrWriteMemory() ||
+      I->mayHaveSideEffects() || isa<PHINode>(I) || I->isTerminator())
+    return false;
+  if (!Visited.insert(I).second)
+    return true;
+  return llvm::all_of(I->operands(), [&](Value *Op) {
+    return isIndependentHBLoadAddress(Op, PN, DT, Visited);
+  });
+}
+
+// Form a bounded constant-GEP key to avoid counting duplicate requests. Do not
+// chase aliases or returned pointer arguments, or make no-alias assumptions.
+static std::optional<std::pair<Value *, int64_t>>
+getHBLoadAddress(Value *Ptr, const DataLayout &DL) {
+  APInt Offset(DL.getIndexTypeSizeInBits(Ptr->getType()), 0);
+  for (unsigned Depth = 0; Depth != 16; ++Depth) {
+    auto *GEP = dyn_cast<GEPOperator>(Ptr);
+    if (!GEP)
+      return std::make_pair(Ptr, Offset.getSExtValue());
+    APInt GEPOffset(Offset.getBitWidth(), 0);
+    if (!GEP->accumulateConstantOffset(DL, GEPOffset))
+      return std::make_pair(Ptr, Offset.getSExtValue());
+    Offset += GEPOffset;
+    Ptr = GEP->getPointerOperand();
+  }
+  return std::nullopt;
+}
+
+bool RISCVCodeGenPrepare::shouldDelayHBConditionalFAdd(PHINode &PN,
+                                                       BinaryOperator &Add,
+                                                       LoadInst &Load,
+                                                       BinaryOperator &Use,
+                                                       unsigned LoadedIdx) {
+  if (!Load.isSimple() || !Load.hasOneUse())
+    return false;
+
+  // Restrict the original execution count to a simple load/fallback triangle.
+  // In particular, do not substitute an unknown multi-predecessor load count.
+  BasicBlock *Fallback = PN.getIncomingBlock(1 - LoadedIdx);
+  auto *Guard = dyn_cast<BranchInst>(Fallback->getTerminator());
+  if (Add.getParent()->getSinglePredecessor() != Fallback || !Guard ||
+      !Guard->isConditional())
+    return false;
+  unsigned LoadSucc = Guard->getSuccessor(0) == Add.getParent() ? 0 : 1;
+  if (Guard->getSuccessor(LoadSucc) != Add.getParent() ||
+      Guard->getSuccessor(1 - LoadSucc) != PN.getParent())
+    return false;
+
+  // Moving to a loop body or across an early exit can change how often the
+  // identity add runs. Do not rely on a later machine pass to hoist it back.
+  if (!HBLI) {
+    HBLI.emplace(*DT);
+    HBPDT.emplace(F);
+    ReversePostOrderTraversal<Function *> RPOT(&F);
+    HBIrreducible = containsIrreducibleCFG<BasicBlock *>(RPOT, *HBLI);
+  }
+  // LoopInfo alone does not describe repeated execution in irreducible CFGs.
+  if (HBIrreducible ||
+      HBLI->getLoopFor(PN.getParent()) != HBLI->getLoopFor(Use.getParent()) ||
+      !HBPDT->dominates(Use.getParent(), PN.getParent()))
+    return false;
+
+  // The fallback acquires one FP add. With profile/expect information, do not
+  // optimize a load arm less frequent than that fallback. Without it, a
+  // balanced branch is only a profitability heuristic, not a promised gain.
+  uint64_t TrueWeight, FalseWeight;
+  if (extractBranchWeights(*Guard, TrueWeight, FalseWeight)) {
+    uint64_t LoadWeight = LoadSucc == 0 ? TrueWeight : FalseWeight;
+    uint64_t FallbackWeight = LoadSucc == 0 ? FalseWeight : TrueWeight;
+    if (LoadWeight < FallbackWeight)
+      return false;
+  }
+
+  // A completion barrier between the original add and its proposed consumer
+  // removes the overlap opportunity. Bound this search; complicated regions
+  // can retain the original code rather than guess at a benefit.
+  auto PreventsOverlap = [](Instruction &I) {
+    return isa<CallBase, FenceInst>(I) || I.mayWriteToMemory() ||
+           (isa<LoadInst>(I) && !cast<LoadInst>(I).isSimple());
+  };
+  // Include the load-arm suffix, not just blocks after the merge. A fence
+  // after the load (on either side of its add) has already waited for it.
+  for (Instruction *I = Load.getNextNode(); I; I = I->getNextNode())
+    if (PreventsOverlap(*I))
+      return false;
+  SmallVector<BasicBlock *, 8> Worklist = {PN.getParent()};
+  SmallPtrSet<BasicBlock *, 16> VisitedBlocks;
+  while (!Worklist.empty()) {
+    BasicBlock *BB = Worklist.pop_back_val();
+    if (!VisitedBlocks.insert(BB).second)
+      continue;
+    if (VisitedBlocks.size() > 16 ||
+        HBLI->getLoopFor(BB) != HBLI->getLoopFor(PN.getParent()))
+      return false;
+    for (Instruction &I : *BB) {
+      if (&I == &Use)
+        break;
+      if (PreventsOverlap(I))
+        return false;
+    }
+    if (BB != Use.getParent())
+      llvm::append_range(Worklist, successors(BB));
+  }
+
+  // HB issues one scalar instruction per cycle, and an FADD result takes
+  // three cycles to become available to an FP arithmetic consumer. Require
+  // more than that many independent useful requests (four), instead of
+  // sinking across a lone load and paying the fallback add for negligible
+  // scheduling room. This is an issue-window heuristic, NOT an assumed load
+  // latency or an exact cycle model; cache/network latency is not fixed here.
+  // In particular, cheap local loads can instead hide the ORIGINAL add's
+  // result latency, and sinking can lose even with this request window. Keep
+  // the transform opt-in until a reliable profitability distinction is known.
+  unsigned IndependentLoads = 0;
+  SmallVector<std::pair<Value *, int64_t>, 8> CountedAddresses;
+  for (Instruction &I : *Use.getParent()) {
+    if (&I == &Use)
+      break;
+    auto *Later = dyn_cast<LoadInst>(&I);
+    if (!Later || !Later->isSimple() ||
+        (!Later->getType()->isFloatTy() && !Later->getType()->isIntegerTy(32)))
+      continue;
+    SmallPtrSet<Value *, 16> Visited;
+    if (!isIndependentHBLoadAddress(Later->getPointerOperand(), PN, *DT,
+                                    Visited))
+      continue;
+    // Repeated addresses can become one load during instruction selection.
+    // Deduplicate syntactically equivalent constant GEPs as well as identical
+    // pointers. Distinct unknown bases may still alias at runtime; this is
+    // not a proof of separate cache misses or independent memory banks.
+    auto Address = getHBLoadAddress(Later->getPointerOperand(), *DL);
+    if (!Address || llvm::is_contained(CountedAddresses, *Address))
+      continue;
+    // Dead loads or values already consumed before the insertion point do
+    // not provide a live request window for the delayed arithmetic.
+    bool UsedAfter = llvm::any_of(Later->users(), [&](User *U) {
+      auto *UserI = dyn_cast<Instruction>(U);
+      return UserI && !isa<PHINode>(UserI) &&
+             (UserI == &Use || DT->dominates(&Use, UserI));
+    });
+    if (UsedAfter) {
+      CountedAddresses.push_back(*Address);
+      if (++IndependentLoads == 4)
+        return true;
+    }
+  }
+  return false;
+}
+
 // InstCombine may fold add(phi(load, 0), base) into the load's predecessor.
 // On an in-order core this can wait for the load before later independent
 // loads have issued. Restore the merge and delay the addition to its sole
@@ -105,6 +281,8 @@ bool RISCVCodeGenPrepare::visitPHINode(PHINode &PN) {
       continue;
     auto *Load = dyn_cast<LoadInst>(Add->getOperand(1 - BaseIdx));
     if (!Load || Load->getParent() != Add->getParent())
+      continue;
+    if (!shouldDelayHBConditionalFAdd(PN, *Add, *Load, *Use, Idx))
       continue;
     auto *Loaded =
         PHINode::Create(PN.getType(), 2, "hb.loaded", PN.getIterator());

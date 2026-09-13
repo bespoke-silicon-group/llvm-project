@@ -1,19 +1,20 @@
-; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -stop-after=riscv-codegenprepare -verify-machineinstrs -verify-dom-info %s -o - | FileCheck %s
-; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -verify-machineinstrs %s -o /dev/null
+; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-delay-conditional-fadd=true -stop-after=riscv-codegenprepare -verify-machineinstrs -verify-dom-info %s -o - | FileCheck %s
+; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-delay-conditional-fadd=true -verify-machineinstrs %s -o /dev/null
 ; RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-delay-conditional-fadd=false -verify-machineinstrs %s -o /dev/null
 
-; Check validity when the consumer does not postdominate the merge, and when
-; it is inside a loop. This is a legality/codegen check, NOT a profitability
-; assertion for moving an invariant addition into a more frequently run block.
+; Keep the original computation when the consumer can be skipped, or when
+; it moves into a loop. Profitability must not rely on later invariant hoisting.
 ; CHECK-LABEL: define float @fp_cold(
 ; CHECK: %x = load float, ptr %p
-; CHECK: %hb.loaded = phi float
-; CHECK: %hb.late.add = fadd nnan nsz float
+; CHECK: %sum = fadd nnan nsz float
+; CHECK: %merged = phi float
+; CHECK-NOT: hb.late.add
 ; CHECK: ret float
 ; CHECK-LABEL: define float @fp_loop(
 ; CHECK: %x = load float, ptr %p
-; CHECK: %hb.loaded = phi float
-; CHECK: %hb.late.add = fadd nnan nsz float
+; CHECK: %sum = fadd nnan nsz float
+; CHECK: %merged = phi float
+; CHECK-NOT: hb.late.add
 ; CHECK: ret float
 
 define float @fp_cold(ptr %p, ptr %q, float %base, i1 %cond, i32 %n)  {
