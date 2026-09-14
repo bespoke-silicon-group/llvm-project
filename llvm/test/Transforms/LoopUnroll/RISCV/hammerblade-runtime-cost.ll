@@ -1,9 +1,10 @@
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll -verify-each | FileCheck %s --check-prefix=HB
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll -hb-runtime-memory-unroll=false -verify-each | FileCheck %s --check-prefix=OFF
-; Runtime setup is not amortized by a small body alone. The current factor-four
-; policy requires at least 16 proven/actually profiled iterations; unknown trips
-; and the threshold-minus-one lower bound do not opt in. Explicit unroll
-; requests are still handled by the generic unroller.
+; Runtime unrolling defaults to two for small native-scalar bodies; real long
+; trip evidence promotes to four. Unknown counts and a lower bound of 15 use
+; two with retained exit checks rather than losing the optimization entirely.
+; Long counts use a main loop and unrolled remainder. Explicit requests remain
+; handled by the generic unroller. Profile likelihood hints do not promote.
 
 ; HB-LABEL: define void @at_threshold(
 ; HB: loop:
@@ -38,6 +39,9 @@ exit:
 ; HB-LABEL: define void @below_threshold(
 ; HB: loop:
 ; HB-COUNT-2: load i32
+; HB: br i1
+; HB: loop.1:
+; HB-COUNT-2: load i32
 ; HB-NOT: load i32
 ; HB: br i1
 ; OFF-LABEL: define void @below_threshold(
@@ -67,6 +71,9 @@ exit:
 
 ; HB-LABEL: define void @unknown(
 ; HB: loop:
+; HB-COUNT-2: load i32
+; HB: br i1
+; HB: loop.1:
 ; HB-COUNT-2: load i32
 ; HB-NOT: load i32
 ; HB: br i1
@@ -125,17 +132,20 @@ exit:
   ret void
 }
 
-; HB-LABEL: define void @profile_short(
+; HB-LABEL: define void @profile_medium(
 ; HB: loop:
+; HB-COUNT-2: load i32
+; HB: br i1
+; HB: loop.1:
 ; HB-COUNT-2: load i32
 ; HB-NOT: load i32
 ; HB: br i1
-; OFF-LABEL: define void @profile_short(
+; OFF-LABEL: define void @profile_medium(
 ; OFF: loop:
 ; OFF-COUNT-2: load i32
 ; OFF-NOT: load i32
 ; OFF: br i1
-define void @profile_short(ptr %a, ptr %b, ptr %c, i32 %n) !prof !0 {
+define void @profile_medium(ptr %a, ptr %b, ptr %c, i32 %n) !prof !0 {
 entry:
   %nonzero = icmp ne i32 %n, 0
   br i1 %nonzero, label %loop, label %exit
@@ -157,6 +167,9 @@ exit:
 
 ; HB-LABEL: define void @unprofiled_bias(
 ; HB: loop:
+; HB-COUNT-2: load i32
+; HB: br i1
+; HB: loop.1:
 ; HB-COUNT-2: load i32
 ; HB-NOT: load i32
 ; HB: br i1
@@ -224,6 +237,9 @@ exit:
 ; Synthetic function-entry counts do not supply measured long-trip evidence.
 ; HB-LABEL: define void @synthetic_profile(
 ; HB: loop:
+; HB-COUNT-2: load i32
+; HB: br i1
+; HB: loop.1:
 ; HB-COUNT-2: load i32
 ; HB-NOT: load i32
 ; HB: br i1

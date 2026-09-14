@@ -1351,7 +1351,8 @@ tryToUnrollLoop(Loop *L, DominatorTree &DT, LoopInfo *LI, ScalarEvolution &SE,
   ULO.Force = UP.Force;
   ULO.AllowExpensiveTripCount = UP.AllowExpensiveTripCount;
   ULO.UnrollRemainder = UP.UnrollRemainder;
-  ULO.Runtime = UP.Runtime;
+  ULO.Runtime = UP.Runtime &&
+                (IsCountSetExplicitly || UP.RuntimeUnrollWithRemainder);
   ULO.ForgetAllSCEV = ForgetAllSCEV;
   ULO.Heart = getLoopConvergenceHeart(L);
   ULO.SCEVExpansionBudget = UP.SCEVExpansionBudget;

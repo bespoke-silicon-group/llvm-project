@@ -2,16 +2,20 @@
 ; RUN: opt -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll -hb-runtime-memory-unroll=false -verify-each -S %s -o - | FileCheck %s --check-prefix=OFF
 
 ; No noalias or overflow promises: overlapping buffers and loop-carried memory
-; dependencies remain legal. Preserve the explicit zero-trip exit and generate
-; no setup/remainder for an unknown trip count. Differential execution covers
-; lengths 0-9 and boundaries. A separately guarded long-loop test covers the
-; runtime-unroll positive case.
+; dependencies remain legal. Preserve the explicit zero-trip exit. An unknown
+; count gets two copies with each original exit check, without a remainder.
+; Differential execution covers lengths 0-9 and factor/promotion boundaries.
 ; CHECK-LABEL: define void @stream(
 ; CHECK: %zero = icmp eq i32 %n, 0
 ; CHECK: br i1 %zero, label %exit, label
 ; CHECK: loop:
 ; CHECK-COUNT-2: load i32
 ; CHECK-NOT: load i32
+; CHECK: br i1
+; CHECK: loop.1:
+; CHECK-COUNT-2: load i32
+; CHECK-NOT: load i32
+; CHECK: br i1
 ; CHECK-NOT: epil
 ; CHECK: ret void
 ; OFF-LABEL: define void @stream(

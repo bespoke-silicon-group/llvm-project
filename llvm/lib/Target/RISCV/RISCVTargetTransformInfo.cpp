@@ -57,19 +57,13 @@ static cl::opt<bool> HBRuntimeMemoryUnroll(
     cl::desc(
         "Expose independent work in small HB runtime-counted memory loops"));
 
-// Runtime unrolling adds a dispatch and remainder even to a one-trip loop.
-// Budget 16 instructions for the dispatch/remainder setup (15 were observed in
-// a two-load/one-store loop). Each factor-N batch removes N-1 backedges,
-// costing approximately an induction update and a branch each. Require enough
-// complete batches to repay setup, plus one batch of margin for remainder/guard
-// work. This is a profitability floor, not a legality requirement or a cycle
-// model; body size alone is not evidence that the runtime trip count is large.
-static bool hasProfitableHBRuntimeTripCount(Loop *L, ScalarEvolution &SE,
-                                            unsigned Count) {
-  const unsigned SetupInstructions = 16;
-  const unsigned SavedInstructionsPerBatch = 2 * (Count - 1);
-  const unsigned MinTripCount =
-      Count * (divideCeil(SetupInstructions, SavedInstructionsPerBatch) + 1);
+// Long-trip evidence justifies a larger factor, rather than being required for
+// every runtime unroll. The smaller factor limits dispatch and remainder costs
+// when the count is unknown. Sixteen is a conservative promotion threshold,
+// not a legality condition or a universal break-even point. The generic
+// unroller still applies known-short/profiled-short vetoes and its size budget.
+static bool hasLongHBRuntimeTripCount(Loop *L, ScalarEvolution &SE) {
+  const unsigned MinTripCount = 16;
   const SCEV *Backedges = SE.getBackedgeTakenCount(L);
   if (!isa<SCEVCouldNotCompute>(Backedges)) {
     const SCEV *MinBackedges =
@@ -2917,24 +2911,43 @@ void RISCVTTIImpl::getUnrollingPreferences(
         !findOptionMDForLoop(L, "llvm.loop.unroll.enable")) {
       unsigned Loads = 0, Stores = 0, Insns = 0;
       bool Simple = true;
+      auto IsNativeScalar = [](Type *Ty) {
+        return Ty->isPointerTy() || Ty->isFloatTy() ||
+               (Ty->isIntegerTy() && Ty->getIntegerBitWidth() <= 32);
+      };
       for (const Instruction &I : *L->getHeader()) {
         ++Insns;
+        // The IR body budget is meaningful only for native scalar values:
+        // wide integer/software-FP operations can expand into many RV32
+        // instructions and registers despite occupying a single IR slot.
+        Simple &= I.getType()->isVoidTy() || IsNativeScalar(I.getType());
         if (const auto *LD = dyn_cast<LoadInst>(&I)) {
           ++Loads;
-          Simple &= LD->isSimple() && !LD->getType()->isVectorTy();
+          Simple &= LD->isSimple();
         } else if (const auto *ST = dyn_cast<StoreInst>(&I)) {
           ++Stores;
           Simple &=
-              ST->isSimple() && !ST->getValueOperand()->getType()->isVectorTy();
+              ST->isSimple() && IsNativeScalar(ST->getValueOperand()->getType());
         } else if (isa<CallBase>(I) || I.mayReadOrWriteMemory()) {
           Simple = false;
         }
       }
       if (Simple && Insns <= 16 && Loads >= 2 && Stores >= 1 &&
-          hasProfitableHBRuntimeTripCount(L, SE, 4)) {
+          SE.hasLoopInvariantBackedgeTakenCount(L)) {
+        bool LongTripCount = hasLongHBRuntimeTripCount(L, SE);
+        unsigned Count = LongTripCount ? 4 : 2;
         UP.Runtime = true;
-        UP.DefaultUnrollRuntimeCount = 4;
-        UP.MaxCount = std::min(UP.MaxCount, 4u);
+        UP.DefaultUnrollRuntimeCount = Count;
+        UP.MaxCount = std::min(UP.MaxCount, Count);
+        // When the count is unknown, retaining the per-iteration exit checks
+        // gives a small amount of address/control amortization without a
+        // dispatch and a second loop. Long-trip evidence instead permits the
+        // more aggressive main-loop/remainder form. Both use the existing
+        // generic unroller and preserve the original memory/FP operation order.
+        UP.RuntimeUnrollWithRemainder = LongTripCount;
+        // The remainder has at most Count-1 iterations. Expanding this small
+        // tail avoids a second loop's control/address overhead on short calls.
+        UP.UnrollRemainder = true;
       }
     }
     // An opaque memory clobber often separates a manually staged batch from
