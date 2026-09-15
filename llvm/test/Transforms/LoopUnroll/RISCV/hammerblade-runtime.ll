@@ -2,9 +2,9 @@
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=hb-rv32 -passes=loop-unroll -hb-runtime-memory-unroll=false | FileCheck %s --check-prefixes=OFF,ALL
 ; RUN: opt %s -S -mtriple=riscv32 -mcpu=generic-rv32 -passes=loop-unroll | FileCheck %s --check-prefixes=OFF,ALL
 
-; Only small single-block, nonvolatile, call-free memory loops with enough
-; trip-count evidence to amortize dispatch/remainder setup opt in.
-; The generic unroller supplies the exact-trip-count remainder handling.
+; Only small native-scalar, single-block, nonvolatile, call-free memory loops
+; opt in. Long-trip evidence promotes the default factor from two to four.
+; The generic unroller supplies and unrolls the bounded remainder.
 
 ; HB-LABEL: define void @stream(
 ; HB: loop:

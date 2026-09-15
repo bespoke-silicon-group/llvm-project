@@ -678,6 +678,11 @@ public:
     bool UpperBound;
     /// Allow unrolling of all the iterations of the runtime loop remainder.
     bool UnrollRemainder;
+    /// For an automatically selected runtime count, form a main loop plus a
+    /// remainder. A target may instead retain the exit test in each unrolled
+    /// iteration to avoid dispatch/remainder setup for short unknown counts.
+    /// This changes only the generated form, not unrolling legality or budgets.
+    bool RuntimeUnrollWithRemainder = true;
     /// Allow unroll and jam. Used to enable unroll and jam for the target.
     bool UnrollAndJam;
     /// Threshold for unroll and jam, for inner loop size. The 'Threshold'
