@@ -1,0 +1,209 @@
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -run-pass=livevars,phi-node-elimination -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=HB,ALL
+# RUN: llc -mtriple=riscv32 -mcpu=hb-rv32 -mattr=+f -hb-split-fp-copy-edges=false -run-pass=livevars,phi-node-elimination -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=OFF,ALL
+# RUN: llc -mtriple=riscv32 -mcpu=generic-rv32 -mattr=+f -run-pass=livevars,phi-node-elimination -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=OFF,ALL
+
+# Avoid executing a group of fallback FP copies on both successor paths.
+# Single-copy, integer-only and size-optimized functions retain generic policy.
+--- |
+  define void @four_fp()  { ret void }
+  define void @one_fp()  { ret void }
+  define void @four_int()  { ret void }
+  define void @four_fp_size() optsize { ret void }
+  define void @four_fp_undef() { ret void }
+  define void @loop_backedge() { ret void }
+...
+---
+name: four_fp
+tracksRegLiveness: true
+body: |
+  ; HB-LABEL: name: four_fp
+  ; HB: %1:fpr32 = COPY killed $f10_f
+  ; HB-NEXT: BNE
+  ; HB: bb.3:
+  ; HB: %10:fpr32 = COPY %1
+  ; HB-NEXT: %11:fpr32 = COPY %1
+  ; HB-NEXT: %12:fpr32 = COPY %1
+  ; HB-NEXT: %13:fpr32 = COPY killed %1
+  ; OFF-LABEL: name: four_fp
+  ; OFF: %1:fpr32 = COPY killed $f10_f
+  ; OFF-NEXT: %10:fpr32 = COPY %1
+  ; OFF-NEXT: %11:fpr32 = COPY %1
+  ; OFF-NEXT: %12:fpr32 = COPY %1
+  ; OFF-NEXT: %13:fpr32 = COPY killed %1
+  ; OFF-NEXT: BEQ
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $f10_f
+    %0:gpr = COPY $x10
+    %1:fpr32 = COPY $f10_f
+    BEQ %0, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    %2:fpr32 = IMPLICIT_DEF
+    %3:fpr32 = IMPLICIT_DEF
+    %4:fpr32 = IMPLICIT_DEF
+    %5:fpr32 = IMPLICIT_DEF
+    PseudoBR %bb.2
+  bb.2:
+    %6:fpr32 = PHI %1, %bb.0, %2, %bb.1
+    %7:fpr32 = PHI %1, %bb.0, %3, %bb.1
+    %8:fpr32 = PHI %1, %bb.0, %4, %bb.1
+    %9:fpr32 = PHI %1, %bb.0, %5, %bb.1
+    $f12_f = COPY %6
+    $f13_f = COPY %7
+    $f14_f = COPY %8
+    $f15_f = COPY %9
+    PseudoRET implicit $f12_f, implicit $f13_f, implicit $f14_f, implicit $f15_f
+...
+---
+name: one_fp
+tracksRegLiveness: true
+body: |
+  ; ALL-LABEL: name: one_fp
+  ; ALL-NOT: bb.3:
+  ; ALL: PseudoRET
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $f10_f
+    %0:gpr = COPY $x10
+    %1:fpr32 = COPY $f10_f
+    BEQ %0, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    %2:fpr32 = IMPLICIT_DEF
+    PseudoBR %bb.2
+  bb.2:
+    %6:fpr32 = PHI %1, %bb.0, %2, %bb.1
+    $f12_f = COPY %6
+    PseudoRET implicit $f12_f
+...
+---
+name: four_int
+tracksRegLiveness: true
+body: |
+  ; ALL-LABEL: name: four_int
+  ; ALL-NOT: bb.3:
+  ; ALL: PseudoRET
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $x11
+    %0:gpr = COPY $x10
+    %1:gpr = COPY $x11
+    BEQ %0, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    %2:gpr = IMPLICIT_DEF
+    %3:gpr = IMPLICIT_DEF
+    %4:gpr = IMPLICIT_DEF
+    %5:gpr = IMPLICIT_DEF
+    PseudoBR %bb.2
+  bb.2:
+    %6:gpr = PHI %1, %bb.0, %2, %bb.1
+    %7:gpr = PHI %1, %bb.0, %3, %bb.1
+    %8:gpr = PHI %1, %bb.0, %4, %bb.1
+    %9:gpr = PHI %1, %bb.0, %5, %bb.1
+    $x12 = COPY %6
+    $x13 = COPY %7
+    $x14 = COPY %8
+    $x15 = COPY %9
+    PseudoRET implicit $x12, implicit $x13, implicit $x14, implicit $x15
+...
+---
+name: four_fp_size
+tracksRegLiveness: true
+body: |
+  ; ALL-LABEL: name: four_fp_size
+  ; ALL-NOT: bb.3:
+  ; ALL: PseudoRET
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $f10_f
+    %0:gpr = COPY $x10
+    %1:fpr32 = COPY $f10_f
+    BEQ %0, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    %2:fpr32 = IMPLICIT_DEF
+    %3:fpr32 = IMPLICIT_DEF
+    %4:fpr32 = IMPLICIT_DEF
+    %5:fpr32 = IMPLICIT_DEF
+    PseudoBR %bb.2
+  bb.2:
+    %6:fpr32 = PHI %1, %bb.0, %2, %bb.1
+    %7:fpr32 = PHI %1, %bb.0, %3, %bb.1
+    %8:fpr32 = PHI %1, %bb.0, %4, %bb.1
+    %9:fpr32 = PHI %1, %bb.0, %5, %bb.1
+    $f12_f = COPY %6
+    $f13_f = COPY %7
+    $f14_f = COPY %8
+    $f15_f = COPY %9
+    PseudoRET implicit $f12_f, implicit $f13_f, implicit $f14_f, implicit $f15_f
+...
+---
+name: four_fp_undef
+tracksRegLiveness: true
+body: |
+  ; ALL-LABEL: name: four_fp_undef
+  ; ALL-NOT: bb.3:
+  ; ALL: PseudoRET
+  bb.0:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    liveins: $x10, $f10_f
+    %0:gpr = COPY $x10
+    %1:fpr32 = COPY $f10_f
+    BEQ %0, $x0, %bb.2
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.2(0x80000000)
+    %2:fpr32 = IMPLICIT_DEF
+    %3:fpr32 = IMPLICIT_DEF
+    %4:fpr32 = IMPLICIT_DEF
+    %5:fpr32 = IMPLICIT_DEF
+    PseudoBR %bb.2
+  bb.2:
+    %6:fpr32 = PHI %1, %bb.0, %2, %bb.1
+    %7:fpr32 = PHI %1, %bb.0, %3, %bb.1
+    %8:fpr32 = PHI %1, %bb.0, %4, %bb.1
+    %9:fpr32 = PHI undef %1, %bb.0, %5, %bb.1
+    $f12_f = COPY %6
+    $f13_f = COPY %7
+    $f14_f = COPY %8
+    $f15_f = COPY %9
+    PseudoRET implicit $f12_f, implicit $f13_f, implicit $f14_f, implicit $f15_f
+...
+---
+name: loop_backedge
+tracksRegLiveness: true
+body: |
+  ; ALL-LABEL: name: loop_backedge
+  ; ALL-NOT: bb.3:
+  ; ALL: PseudoRET
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $x10, $f10_f
+    %0:gpr = COPY $x10
+    %1:fpr32 = COPY $f10_f
+    PseudoBR %bb.1
+  bb.1:
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+    %6:fpr32 = PHI %1, %bb.0, %2, %bb.1
+    %7:fpr32 = PHI %1, %bb.0, %3, %bb.1
+    %8:fpr32 = PHI %1, %bb.0, %4, %bb.1
+    %9:fpr32 = PHI %1, %bb.0, %5, %bb.1
+    %2:fpr32 = COPY %6
+    %3:fpr32 = COPY %7
+    %4:fpr32 = COPY %8
+    %5:fpr32 = COPY %9
+    BNE %0, $x0, %bb.1
+    PseudoBR %bb.2
+  bb.2:
+    $f12_f = COPY %6
+    $f13_f = COPY %7
+    $f14_f = COPY %8
+    $f15_f = COPY %9
+    PseudoRET implicit $f12_f, implicit $f13_f, implicit $f14_f, implicit $f15_f
+...

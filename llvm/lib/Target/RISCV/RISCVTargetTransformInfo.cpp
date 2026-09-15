@@ -8,15 +8,19 @@
 
 #include "RISCVTargetTransformInfo.h"
 #include "MCTargetDesc/RISCVMatInt.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
 #include "llvm/CodeGen/CostTable.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/IR/PatternMatch.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
 #include <cmath>
 #include <optional>
 using namespace llvm;
@@ -43,6 +47,94 @@ static cl::opt<unsigned>
                     cl::desc("Set the lower bound of a trip count to decide on "
                              "vectorization while tail-folding."),
                     cl::init(5), cl::Hidden);
+
+static cl::opt<bool> HBPreserveStagedLoops(
+    "hb-preserve-staged-loops", cl::Hidden, cl::init(true),
+    cl::desc("Avoid automatic HB unrolling of heavily staged memory loops"));
+
+static cl::opt<bool> HBRuntimeMemoryUnroll(
+    "hb-runtime-memory-unroll", cl::Hidden, cl::init(true),
+    cl::desc(
+        "Expose independent work in small HB runtime-counted memory loops"));
+
+// Runtime unrolling adds a dispatch and remainder even to a one-trip loop.
+// Budget 16 instructions for the dispatch/remainder setup (15 were observed in
+// a two-load/one-store loop). Each factor-N batch removes N-1 backedges,
+// costing approximately an induction update and a branch each. Require enough
+// complete batches to repay setup, plus one batch of margin for remainder/guard
+// work. This is a profitability floor, not a legality requirement or a cycle
+// model; body size alone is not evidence that the runtime trip count is large.
+static bool hasProfitableHBRuntimeTripCount(Loop *L, ScalarEvolution &SE,
+                                            unsigned Count) {
+  const unsigned SetupInstructions = 16;
+  const unsigned SavedInstructionsPerBatch = 2 * (Count - 1);
+  const unsigned MinTripCount =
+      Count * (divideCeil(SetupInstructions, SavedInstructionsPerBatch) + 1);
+  const SCEV *Backedges = SE.getBackedgeTakenCount(L);
+  if (!isa<SCEVCouldNotCompute>(Backedges)) {
+    const SCEV *MinBackedges =
+        SE.getConstant(Backedges->getType(), MinTripCount - 1);
+    if (SE.isKnownPredicate(ICmpInst::ICMP_UGE, Backedges, MinBackedges) ||
+        SE.isLoopEntryGuardedByCond(L, ICmpInst::ICMP_UGE, Backedges,
+                                    MinBackedges))
+      return true;
+  }
+  // A real profile supplies expected profitability, not a proven minimum.
+  // Exclude synthetic entry counts and unprofiled branch-likelihood hints.
+  // The generic unroller continues to handle explicit source unroll requests.
+  if (L->getHeader()->getParent()->hasProfileData())
+    if (auto EstimatedTripCount = getLoopEstimatedTripCount(L))
+      return *EstimatedTripCount >= MinTripCount;
+  return false;
+}
+
+// Estimate the staged data footprint from SSA values actually live across an
+// opaque memory clobber. Counting memory operations instead incorrectly treats
+// dead loads, values consumed before the clobber, and several separate batches
+// as simultaneously live. This deliberately uses only block-local scalar
+// definitions: it is a cheap lower bound, not global register allocation.
+static unsigned getHBStagedLiveWords(const Loop *L) {
+  const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
+  unsigned MaxWords = 0;
+  for (const BasicBlock *BB : L->blocks()) {
+    SmallPtrSet<const Instruction *, 32> Live;
+    auto IsData = [](const Instruction *I) {
+      return !isa<PHINode>(I) &&
+             (I->getType()->isIntegerTy() || I->getType()->isFloatingPointTy());
+    };
+    // A use in another block keeps a local definition live out of this block.
+    for (const Instruction &I : *BB)
+      if (IsData(&I) && llvm::any_of(I.users(), [BB](const User *U) {
+            const auto *UI = dyn_cast<Instruction>(U);
+            return UI && UI->getParent() != BB;
+          }))
+        Live.insert(&I);
+    for (const Instruction &I : llvm::reverse(*BB)) {
+      // A returning asm's result is defined at the clobber, not live across it.
+      Live.erase(&I);
+      if (const auto *CB = dyn_cast<CallBase>(&I))
+        if (const auto *IA = dyn_cast<InlineAsm>(CB->getCalledOperand()))
+          if (IA->getConstraintString().contains("~{memory}")) {
+            unsigned IntWords = 0, FPWords = 0;
+            for (const Instruction *V : Live) {
+              unsigned Words = divideCeil(
+                  DL.getTypeStoreSize(V->getType()).getFixedValue(), 4);
+              // HB has native FP32 only; wider software FP values use GPRs.
+              if (V->getType()->isFloatTy())
+                FPWords += Words;
+              else
+                IntWords += Words;
+            }
+            MaxWords = std::max({MaxWords, IntWords, FPWords});
+          }
+      for (const Value *V : I.operands())
+        if (const auto *VI = dyn_cast<Instruction>(V))
+          if (VI->getParent() == BB && IsData(VI))
+            Live.insert(VI);
+    }
+  }
+  return MaxWords;
+}
 
 InstructionCost
 RISCVTTIImpl::getRISCVInstructionCost(ArrayRef<unsigned> OpCodes, MVT VT,
@@ -2813,6 +2905,62 @@ void RISCVTTIImpl::getUnrollingPreferences(
     // growth and avoid forcing every small loop to unroll.
     UP.Partial = true;
     UP.PartialThreshold = 100;
+    // Runtime-counted scalar streaming loops otherwise remain rolled because
+    // Vanilla has no loop buffer. A small factor amortizes branch/address work
+    // and exposes independent loads without duplicating staged or complex CFGs.
+    // Keep constant-trip and explicitly requested unrolling on existing policy.
+    if (HBRuntimeMemoryUnroll && L->getNumBlocks() == 1 &&
+        !SE.getSmallConstantTripCount(L) &&
+        !L->getHeader()->getParent()->hasOptSize() &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.count") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.full") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.enable")) {
+      unsigned Loads = 0, Stores = 0, Insns = 0;
+      bool Simple = true;
+      for (const Instruction &I : *L->getHeader()) {
+        ++Insns;
+        if (const auto *LD = dyn_cast<LoadInst>(&I)) {
+          ++Loads;
+          Simple &= LD->isSimple() && !LD->getType()->isVectorTy();
+        } else if (const auto *ST = dyn_cast<StoreInst>(&I)) {
+          ++Stores;
+          Simple &=
+              ST->isSimple() && !ST->getValueOperand()->getType()->isVectorTy();
+        } else if (isa<CallBase>(I) || I.mayReadOrWriteMemory()) {
+          Simple = false;
+        }
+      }
+      if (Simple && Insns <= 16 && Loads >= 2 && Stores >= 1 &&
+          hasProfitableHBRuntimeTripCount(L, SE, 4)) {
+        UP.Runtime = true;
+        UP.DefaultUnrollRuntimeCount = 4;
+        UP.MaxCount = std::min(UP.MaxCount, 4u);
+      }
+    }
+    // An opaque memory clobber often separates a manually staged batch from
+    // its consumers. Replicating an already wide batch increases live ranges
+    // and spills; duplicating its enclosing loops also grows the hot working
+    // set of this scalar core's small instruction cache. Preserve explicit
+    // source unroll requests, but do not automatically replicate these loops.
+    if (HBPreserveStagedLoops &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.count") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.full") &&
+        !findOptionMDForLoop(L, "llvm.loop.unroll.enable")) {
+      unsigned LiveWords = getHBStagedLiveWords(L);
+      if (LiveWords >= 16 || (LiveWords >= 4 && !L->getSubLoops().empty())) {
+        UP.Threshold = 0;
+        UP.Partial = false;
+        UP.Runtime = false;
+      } else if (LiveWords >= 4) {
+        // Leave roughly half of either scalar register file for addresses,
+        // loop state and arithmetic instead of replicating the live batch
+        // until it consumes all allocatable registers. i64 transfers on RV32
+        // occupy two words, even though they are one memory operation in IR.
+        unsigned Count = 16 / LiveWords;
+        UP.MaxCount = std::min(UP.MaxCount, Count);
+        UP.FullUnrollMaxCount = std::min(UP.FullUnrollMaxCount, Count);
+      }
+    }
     return;
   }
 
